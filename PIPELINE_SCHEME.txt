@@ -47,7 +47,7 @@ CASE 1 — short reads only (--r1 + --r2, no --lr)
   scaffolds.fasta                          assembly_graph_with_scaffolds.gfa
        |                                                |
        |                                                v
-       |                               [GET_ORGANELLE_FROM_ASSEMBLY]  -F fungus_mt
+       |                               [GET_ORGANELLE_FROM_ASSEMBLY]  -F <--species>
        |                                                |
        |                                    is result a single scaffold?
        |                                        |                |
@@ -56,7 +56,7 @@ CASE 1 — short reads only (--r1 + --r2, no --lr)
        |                                        |                v
        |                                        |   [GET_ORGANELLE_FROM_READS]
        |                                        |   (slow fallback, uses trimmed
-       |                                        |    R1/R2 directly, -F fungus_mt)
+       |                                        |    R1/R2 directly, -F <--species>)
        |                                        |                |
        |                                        +--------+-------+
        |                                                 v
@@ -101,7 +101,7 @@ CASE 2 — long reads only, PacBio-HiFi (--lr + --lr_type pacbio-hifi, no --r1/-
   assembly.fasta                assembly_graph.gfa
        |                                |
        |                                v
-       |                  [GET_ORGANELLE_FROM_ASSEMBLY]  -F fungus_mt
+       |                  [GET_ORGANELLE_FROM_ASSEMBLY]  -F <--species>
        |                  (single shot — no read-based fallback in this branch)
        |                                |
        |                                v
@@ -247,16 +247,28 @@ CAVEATS / OPEN ITEMS
 4. Inputs are --r1/--r2/--lr (double-dash), not the -1/-2 convention of
    bwa/samtools — Nextflow reserves single-dash flags for its own launcher.
 
-5. GetOrganelle needs its fungus_mt reference database installed before either
+5. GetOrganelle needs its reference database installed before either
    GET_ORGANELLE_FROM_ASSEMBLY or GET_ORGANELLE_FROM_READS can find anything
    (the biocontainers image ships the tool but not the database). A new
-   GET_ORGANELLE_SETUP process runs `get_organelle_config.py -a fungus_mt`
-   once and caches the result in --getorganelle_db (default:
-   assets/getorganelle_db), via Nextflow's storeDir — downloaded once, reused
-   by every later run regardless of --strain. Every extraction call now takes
-   the resulting LabelDatabase/ (and, for the read-based fallback,
+   GET_ORGANELLE_SETUP process runs `get_organelle_config.py -a <--species>`
+   once and caches the result in --getorganelle_db/<--species> (default
+   --getorganelle_db: assets/getorganelle_db), via Nextflow's storeDir —
+   downloaded once per requested --species, reused by every later run
+   requesting the same one, regardless of --strain. Every extraction call
+   takes the resulting LabelDatabase/ (and, for the read-based fallback,
    SeedDatabase/) as an explicit input so Nextflow schedules the download
-   before extraction ever runs.
+   before extraction ever runs. The cache path is keyed by --species
+   specifically so switching organelle type between runs can't silently
+   reuse a stale cache that never downloaded the newly-requested type.
+
+   --species defaults to fungus_mt but accepts any of GetOrganelle's own -F
+   vocabulary: embplant_pt, embplant_mt, embplant_nr, fungus_mt, fungus_nr,
+   animal_mt, other_pt (or several joined by comma). "anonym" isn't
+   supported — it requires extra custom seed/gene-fasta parameters this
+   pipeline doesn't expose. Note: the mitochondrion/ output folder and
+   <strain>_mitogenome.fasta filename stay fixed regardless of --species —
+   naming doesn't adapt if you extract a plastid/nuclear-ribosomal/other
+   organelle instead of a mitochondrion.
 
 6. SPAdes 4.x's assembly graph defaults to GFA v1.2, which GetOrganelle
    1.7.7.1's parser can't read ("Unrecognized GFA version number: 1.2").

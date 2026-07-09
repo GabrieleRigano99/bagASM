@@ -17,7 +17,7 @@ process GET_ORGANELLE_FROM_READS {
     """
     get_organelle_from_reads.py \\
         -1 ${r1} -2 ${r2} \\
-        -F fungus_mt \\
+        -F ${params.species} \\
         --config-dir \$(pwd) \\
         -t ${task.cpus} \\
         -o gor_out || true

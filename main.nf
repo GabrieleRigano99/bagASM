@@ -40,47 +40,110 @@ include { RACON                       } from './modules/racon'
 include { RENAME_SORT                          } from './modules/rename_sort'
 include { RENAME_SORT as RENAME_SORT_LR        } from './modules/rename_sort'
 
+// GetOrganelle's own -F/-a organelle-type vocabulary (get_organelle_from_assembly.py,
+// get_organelle_from_reads.py, get_organelle_config.py); "anonym" is deliberately
+// excluded since it requires extra custom seed/gene-fasta parameters this
+// pipeline doesn't expose.
+GETORGANELLE_TYPES = ['embplant_pt', 'embplant_mt', 'embplant_nr', 'fungus_mt', 'fungus_nr', 'animal_mt', 'other_pt']
+
+// ── Help message ─────────────────────────────────────────────────────────────
 def helpMessage() {
+    def R  = "[0m"       // reset
+    def B  = "[1m"       // bold
+    def DM = "[2m"       // dim
+    def GR = "[1;32m"    // bold green
+    def CY = "[1;36m"    // bold cyan
+    def YL = "[1;33m"    // bold yellow
+    def MG = "[1;35m"    // bold magenta
+    def LN = "${CY}${'─' * 72}${R}"   // section divider
+
     log.info """
-  ${'-' * 72}
-  bagASM — fungal genome assembly pipeline
-  ${'-' * 72}
-  USAGE (short reads only):
+${GR}   _                    _    ____  __  __ ${R}
+${GR}  | |__   __ _  __ _   / \\  / ___||  \\/  |${R}
+${GR}  | '_ \\ / _' |/ _' | / _ \\ \\___ \\| |\\/| |${R}
+${GR}  | |_) | (_| | (_| |/ ___ \\ ___) | |  | |${R}
+${GR}  |_.__/ \\__,_|\\__, /_/   \\_\\____/|_|  |_|${R}
+${GR}               |___/${R}
+
+  ${B}bagASM${R} — fungal genome assembly pipeline
+  ${DM}Version 1.0.0  •  Bioinformatics and Computational Genomics LAB, UniME${R}
+  ${DM}Main Developer  •  Gabriele Rigano - ORCID https://orcid.org/0009-0008-1928-6789 ${R}
+
+  ${B}USAGE:${R}  nextflow run main.nf [options]
+
+${LN}
+  ${CY}${B}MODE 1${R}  —  short reads only
+${LN}
+
+  ${DM}fastp -> SPAdes -> GetOrganelle -> Redundans -> chlomito -> Polypolish -> rename/sort${R}
+
     nextflow run main.nf --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
 
-  USAGE (long reads, optionally with short reads for polishing):
-    nextflow run main.nf --lr reads.fq.gz --lr_type ont [--r1 R1.fq.gz --r2 R2.fq.gz] \\
-        --strain StrainID --outdir results
+  ${YL}${B}REQUIRED${R}
+    ${B}--r1 / --r2${R}          Illumina paired reads (fastq/fastq.gz)
+    ${B}--strain${R}             Strain/sample ID used for output naming
+    ${B}--outdir${R}             Output directory
 
-  REQUIRED
-    --strain           Strain/sample ID used for output naming
-    --outdir           Output directory
-    --r1 / --r2        Illumina paired reads (required unless --lr is given)
-    --lr               Long-read FASTQ(.gz) (PacBio/ONT); switches assembler to Flye
-    --lr_type          Required with --lr: ont | pacbio-clr | pacbio-hifi
+${LN}
+  ${CY}${B}MODE 2${R}  —  long reads only  ${DM}(PacBio/ONT; switches assembler to Flye)${R}
+${LN}
 
-  MULTIPLE LANES/RUNS OF THE SAME LIBRARY
-    Pass a comma-separated list to --r1/--r2/--lr to pool several lanes or
-    runs of one library, e.g.:
-      --r1 L001_R1.fq.gz,L002_R1.fq.gz --r2 L001_R2.fq.gz,L002_R2.fq.gz
-    --r1 and --r2 must list the same number of files, in matching lane order.
-    This is for multiple lanes/runs of the SAME library, not distinct library
-    preps (different insert sizes, mixed PE/MP) — those aren't supported.
+  ${DM}Flye -> GetOrganelle -> polish -> rename/sort${R}
+  ${DM}polisher is chosen automatically from --lr_type:${R}
+    ${DM}ont          -> medaka${R}
+    ${DM}pacbio-clr   -> racon${R}
+    ${DM}pacbio-hifi  -> none  ${DM}(Flye's own consensus is already highly accurate)${R}
 
-  OPTIONAL
-    --threads                     Threads for process_high steps [${params.threads}]
-    --chlomito_mito_alcr_cutoff    chlomito mitochondrial ALCR cutoff [${params.chlomito_mito_alcr_cutoff}] (short-read path only)
-    --chlomito_mito_sdr_cutoff     chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}] (short-read path only)
-    --ont_mode                     Flye ONT preset [${params.ont_mode}]: hq (--nano-hq, modern/Dorado-Guppy-sup)
-                                   | raw (--nano-raw, R9/low-quality basecalls)  (--lr_type ont only)
-    --medaka_model                 Override medaka's auto-detected model (--lr_type ont only)
-    --polish_rounds                 Number of minibwa+Polypolish iterations [${params.polish_rounds}]
-    --max_memory                   Override memory cap for process_high/long steps
+    nextflow run main.nf --lr reads.fq.gz --lr_type ont --strain StrainID --outdir results
 
-  NOTE: Nextflow reserves single-dash options for its own launcher flags, so
-  inputs are passed as --r1/--r2/--lr (double-dash) rather than the -1/-2
-  convention used by tools like bwa/samtools.
-  ${'-' * 72}
+  ${YL}${B}REQUIRED${R}
+    ${B}--lr${R}                 Long-read FASTQ(.gz)
+    ${B}--lr_type${R}            ${MG}ont${R} | ${MG}pacbio-clr${R} | ${MG}pacbio-hifi${R}
+    ${B}--strain${R} / ${B}--outdir${R}   as in MODE 1
+
+${LN}
+  ${CY}${B}MODE 3${R}  —  long reads + short reads  ${DM}(short reads polish instead)${R}
+${LN}
+
+  ${DM}Same as MODE 2 through Flye/mitogenome extraction, but --r1/--r2 (if given)${R}
+  ${DM}always override medaka/racon with Polypolish, regardless of --lr_type.${R}
+
+    nextflow run main.nf --lr reads.fq.gz --lr_type ont \\
+        --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
+
+${LN}
+  ${YL}${B}MULTIPLE LANES/RUNS OF THE SAME LIBRARY${R}
+${LN}
+
+  Pass a comma-separated list to ${B}--r1${R}/${B}--r2${R}/${B}--lr${R} to pool several lanes or
+  runs of one library, e.g.:
+    --r1 L001_R1.fq.gz,L002_R1.fq.gz --r2 L001_R2.fq.gz,L002_R2.fq.gz
+  --r1 and --r2 must list the same number of files, in matching lane order.
+  ${DM}This is for multiple lanes/runs of the SAME library, not distinct library${R}
+  ${DM}preps (different insert sizes, mixed PE/MP) — those aren't supported.${R}
+
+${LN}
+  ${YL}${B}OPTIONAL${R}
+${LN}
+
+    ${B}--species${R}            Organelle type to extract [${params.species}], passed to
+                        GetOrganelle's -F/-a. One of:
+                          ${MG}${GETORGANELLE_TYPES.join(' | ')}${R}
+                        or several joined by comma, e.g. embplant_pt,embplant_mt
+    ${B}--threads${R}            Threads for process_high steps [${params.threads}]
+    ${B}--chlomito_mito_alcr_cutoff${R}  chlomito mitochondrial ALCR cutoff [${params.chlomito_mito_alcr_cutoff}]  ${DM}(MODE 1 only)${R}
+    ${B}--chlomito_mito_sdr_cutoff${R}   chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}]  ${DM}(MODE 1 only)${R}
+    ${B}--ont_mode${R}            Flye ONT preset [${params.ont_mode}]: ${MG}hq${R} (--nano-hq, modern/Dorado-Guppy-sup)
+                        | ${MG}raw${R} (--nano-raw, R9/low-quality basecalls)  ${DM}(--lr_type ont only)${R}
+    ${B}--medaka_model${R}        Override medaka's auto-detected model  ${DM}(--lr_type ont only)${R}
+    ${B}--polish_rounds${R}       Number of minibwa+Polypolish iterations [${params.polish_rounds}]
+    ${B}--max_memory${R}          Override memory cap for process_high/long steps
+
+${LN}
+  ${DM}NOTE: Nextflow reserves single-dash options for its own launcher flags, so${R}
+  ${DM}inputs are passed as --r1/--r2/--lr (double-dash) rather than the -1/-2${R}
+  ${DM}convention used by tools like bwa/samtools.${R}
+${LN}
   """.stripIndent()
 }
 
@@ -111,6 +174,12 @@ if (!(params.ont_mode in ['hq', 'raw'])) {
 }
 if (!(params.polish_rounds instanceof Integer) || params.polish_rounds < 1) {
     log.error "--polish_rounds must be a positive integer"
+    exit 1
+}
+def species_tokens = params.species.toString().split(',').collect { it.trim() }
+def bad_species = species_tokens - GETORGANELLE_TYPES
+if (bad_species) {
+    log.error "--species has invalid value(s) ${bad_species}. Must be one of: ${GETORGANELLE_TYPES.join(', ')} (or several joined by comma)"
     exit 1
 }
 

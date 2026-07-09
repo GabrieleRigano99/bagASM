@@ -16,7 +16,7 @@ process GET_ORGANELLE_FROM_ASSEMBLY {
     """
     get_organelle_from_assembly.py \\
         -g ${graph} \\
-        -F fungus_mt \\
+        -F ${params.species} \\
         --config-dir \$(pwd) \\
         -t ${task.cpus} \\
         -o goa_out || true
