@@ -1,5 +1,7 @@
 # bagASM
 
+![bagASM.png](bagRNA.png)
+
 Fungal genome assembly pipeline (Nextflow DSL2). Takes Illumina short reads,
 PacBio/ONT long reads, or both, and produces a decontaminated, polished
 nuclear assembly plus a separately extracted mitochondrial genome.
