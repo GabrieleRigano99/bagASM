@@ -1,8 +1,10 @@
 process POLYPOLISH {
     tag "${strain}"
     label 'process_high'
+    // Published on Docker Hub, pulled automatically. Rebuild only if you
+    // change docker/polish_env/Dockerfile:
+    //   docker build -t gabrielerigano/bagasm-polish:1.0 docker/polish_env
     container 'gabrielerigano/bagasm-polish:1.0'
-    // Build first: docker build -t gabrielerigano/bagasm-polish:1.0 docker/polish_env
 
     publishDir "${params.outdir}/assembly/polished", mode: 'copy'
 

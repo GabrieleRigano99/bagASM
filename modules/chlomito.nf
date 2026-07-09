@@ -2,10 +2,12 @@ process CHLOMITO {
     tag "${strain}"
     label 'process_high'
     // Derived from songweidocker/chlomito:v1 with /root made world-readable+
-    // traversable (build: docker build -t gabrielerigano/bagasm-chlomito:1.0
-    // docker/chlomito_fix) — the upstream image installs everything under
-    // /root at mode 700, which the pipeline-wide non-root docker.runOptions
+    // traversable — the upstream image installs everything under /root at
+    // mode 700, which the pipeline-wide non-root docker.runOptions
     // (-u $(id -u):$(id -g)) can't even traverse into, let alone execute.
+    // Published on Docker Hub, pulled automatically. Rebuild only if you
+    // change docker/chlomito_fix/Dockerfile:
+    //   docker build -t gabrielerigano/bagasm-chlomito:1.0 docker/chlomito_fix
     container 'gabrielerigano/bagasm-chlomito:1.0'
     // chlomito shells out to sibling containers internally, so the Docker socket
     // must be mounted through; this only works with the local Docker executor

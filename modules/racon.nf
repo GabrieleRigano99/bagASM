@@ -1,8 +1,10 @@
 process RACON {
     tag "${strain}"
     label 'process_high'
+    // Published on Docker Hub, pulled automatically. Rebuild only if you
+    // change docker/racon_env/Dockerfile:
+    //   docker build -t gabrielerigano/bagasm-racon:1.0 docker/racon_env
     container 'gabrielerigano/bagasm-racon:1.0'
-    // Build first: docker build -t gabrielerigano/bagasm-racon:1.0 docker/racon_env
 
     publishDir "${params.outdir}/assembly/polished", mode: 'copy'
 

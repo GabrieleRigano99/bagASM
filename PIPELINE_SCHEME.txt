@@ -236,8 +236,10 @@ CAVEATS / OPEN ITEMS
    modules/chlomito.nf now uses gabrielerigano/bagasm-chlomito:1.0 (built from
    docker/chlomito_fix, which just chmods /root to a+rX) instead.
 
-3. Three custom images must be built once before running (already built and
-   verified on this machine, but needed on any other host):
+3. [RESOLVED] The three custom images (gabrielerigano/bagasm-polish:1.0,
+   bagasm-racon:1.0, bagasm-chlomito:1.0) are published on Docker Hub and
+   pulled automatically — no manual build needed on a new host. The
+   docker/*/Dockerfile sources stay in the repo for rebuilds only:
      docker build -t gabrielerigano/bagasm-polish:1.0   docker/polish_env
      docker build -t gabrielerigano/bagasm-racon:1.0    docker/racon_env
      docker build -t gabrielerigano/bagasm-chlomito:1.0 docker/chlomito_fix
@@ -271,7 +273,8 @@ CAVEATS / OPEN ITEMS
    output different alignments," and the "mem" subcommand is newer/less
    battle-tested than "map" (minibwa's primary, non-bwa-compatible interface)
    — worth extra scrutiny on real assemblies since this swap is very recent.
-   docker/polish_env now installs minibwa instead of bwa; rebuild:
-     docker build -t gabrielerigano/bagasm-polish:1.0 docker/polish_env
-   --polish_rounds controls the number of minibwa+Polypolish iterations
-   [default 3, was previously hardcoded].
+   docker/polish_env now installs minibwa instead of bwa (published image
+   already updated on Docker Hub — see item 3). --polish_rounds controls the
+   number of minibwa+Polypolish iterations [default 3, was previously
+   hardcoded]. Validated end-to-end on real data (SG03): 3 rounds completed
+   in ~8.5 min on a ~37 MB / 208-contig assembly with ~7.15M read pairs.
