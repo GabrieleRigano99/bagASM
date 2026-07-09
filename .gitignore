@@ -1,0 +1,25 @@
+# Nextflow
+work/
+.nextflow/
+.nextflow.log*
+.nextflow.pid
+
+# Pipeline outputs / reports
+results/
+pipeline_info/
+*.trace.txt
+execution_report*.html
+execution_timeline*.html
+pipeline_dag*.svg
+
+# Downloaded/cached reference databases
+assets/getorganelle_db/
+
+# Test data and scratch
+SG04_test/
+SG03_test/
+testdata*/
+
+# OS / editor cruft
+.DS_Store
+*.swp
