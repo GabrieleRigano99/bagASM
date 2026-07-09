@@ -1,4 +1,4 @@
-# bagASM - An easy to use de novo Genome Assembly Pipeline!
+# bagASM - An easy to use _de novo_ Genome Assembly Pipeline!
 
 ![bagASM_logo.png](bagASM_logo.png)
 
