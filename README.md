@@ -1,7 +1,8 @@
-# bagASM
+# bagASM - An easy to use _de novo_ Genome Assembly Pipeline!
 
-Fungal genome assembly pipeline (Nextflow DSL2). Takes Illumina short reads,
-PacBio/ONT long reads, or both, and produces a decontaminated, polished
+![bagASM_logo.png](bagASM_logo.png)
+
+bagASM has been takes Illumina short reads, PacBio/ONT long reads, or both, and produces a decontaminated, polished
 nuclear assembly plus a separately extracted mitochondrial genome.
 
 See [PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt) for the full flow (all five
@@ -15,12 +16,6 @@ fixed, with rationale for each.
   Docker-specific behavior (see caveats in PIPELINE_SCHEME.txt)
 
 ## Setup
-
-No manual image build needed — `gabrielerigano/bagasm-polish:1.0`,
-`gabrielerigano/bagasm-racon:1.0`, and `gabrielerigano/bagasm-chlomito:1.0`
-are published on Docker Hub and pulled automatically on first use. The
-`docker/*/Dockerfile` sources are kept in the repo for transparency/rebuilds
-only.
 
 The GetOrganelle `fungus_mt` reference database downloads automatically on
 first run and is cached in `assets/getorganelle_db/` (override with
@@ -58,13 +53,3 @@ rather work from a local checkout.)
 `nextflow run GabrieleRigano99/bagASM --help` for the full option list,
 including multi-lane input (`--r1 a.fq.gz,b.fq.gz`), `--polish_rounds`,
 `--ont_mode`, and the chlomito/medaka tuning knobs.
-
-## Layout
-
-```
-main.nf                  entry point: mode selection + workflow wiring
-nextflow.config           params, resource labels, container/profile settings
-modules/                  one process per file
-docker/*/Dockerfile       custom image sources (published pre-built, see "Setup")
-assets/getorganelle_db/   cached reference database (gitignored, auto-populated)
-```
