@@ -17,12 +17,6 @@ fixed, with rationale for each.
 
 ## Setup
 
-No manual image build needed — `gabrielerigano/bagasm-polish:1.0`,
-`gabrielerigano/bagasm-racon:1.0`, and `gabrielerigano/bagasm-chlomito:1.0`
-are published on Docker Hub and pulled automatically on first use. The
-`docker/*/Dockerfile` sources are kept in the repo for transparency/rebuilds
-only.
-
 The GetOrganelle `fungus_mt` reference database downloads automatically on
 first run and is cached in `assets/getorganelle_db/` (override with
 `--getorganelle_db`) — not re-downloaded on later runs.
