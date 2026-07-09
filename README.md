@@ -1,9 +1,8 @@
-# bagASM
+# bagASM - An easy to use de novo Genome Assembly Pipeline!
 
 ![bagASM_logo.png](bagASM_logo.png)
 
-Fungal genome assembly pipeline (Nextflow DSL2). Takes Illumina short reads,
-PacBio/ONT long reads, or both, and produces a decontaminated, polished
+bagASM has been takes Illumina short reads, PacBio/ONT long reads, or both, and produces a decontaminated, polished
 nuclear assembly plus a separately extracted mitochondrial genome.
 
 See [PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt) for the full flow (all five
@@ -60,13 +59,3 @@ rather work from a local checkout.)
 `nextflow run GabrieleRigano99/bagASM --help` for the full option list,
 including multi-lane input (`--r1 a.fq.gz,b.fq.gz`), `--polish_rounds`,
 `--ont_mode`, and the chlomito/medaka tuning knobs.
-
-## Layout
-
-```
-main.nf                  entry point: mode selection + workflow wiring
-nextflow.config           params, resource labels, container/profile settings
-modules/                  one process per file
-docker/*/Dockerfile       custom image sources (published pre-built, see "Setup")
-assets/getorganelle_db/   cached reference database (gitignored, auto-populated)
-```
