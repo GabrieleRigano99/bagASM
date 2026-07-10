@@ -2,14 +2,9 @@
 
 ![bagASM_logo.png](bagASM_logo.png)
 
-bagASM turns raw sequencing reads into a clean genome. Feed it Illumina
-short reads, PacBio or ONT long reads, or both together, and it hands back
-a decontaminated, polished nuclear assembly — plus the mitochondrial
+bagASM is a user friendly pipeline accepting Illumina short reads, PacBio or ONT long reads, or both together, and it hands back
+a (mitochondrial/plastidial) decontaminated, polished nuclear and mitochondrial
 genome, extracted separately and ready on its own.
-
-It's built on Nextflow, so it scales from a laptop to a cluster without you
-touching a line of code, and every run picks its own path automatically
-based on whatever reads you point it at.
 
 For the full technical picture — every branch of the pipeline broken down
 by sequencing platform, the output folder layout, and a running log of
@@ -161,16 +156,6 @@ swap in your own sample name and output folder.
     nextflow run main.nf --lr reads.fq.gz --lr_type ont \
         --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
 
-────────────────────────────────────────────────────────────────────────
-  MULTIPLE LANES/RUNS OF THE SAME LIBRARY
-────────────────────────────────────────────────────────────────────────
-
-  Pass a comma-separated list to --r1/--r2/--lr to pool several lanes or
-  runs of one library, e.g.:
-    --r1 L001_R1.fq.gz,L002_R1.fq.gz --r2 L001_R2.fq.gz,L002_R2.fq.gz
-  --r1 and --r2 must list the same number of files, in matching lane order.
-  This is for multiple lanes/runs of the SAME library, not distinct library
-  preps (different insert sizes, mixed PE/MP) — those aren't supported.
 
 ────────────────────────────────────────────────────────────────────────
   OPTIONAL
@@ -213,11 +198,7 @@ swap in your own sample name and output folder.
   stats, from the assembly's own reads realigned back to it) always run.
   compleasm (BUSCO-style gene completeness) runs only if --busco_lineage is set.
 
-────────────────────────────────────────────────────────────────────────
-  NOTE: Nextflow reserves single-dash options for its own launcher flags, so
-  inputs are passed as --r1/--r2/--lr (double-dash) rather than the -1/-2
-  convention used by tools like bwa/samtools.
-────────────────────────────────────────────────────────────────────────
+
 ```
 
 </details>
