@@ -2,12 +2,19 @@
 
 ![bagASM_logo.png](bagASM_logo.png)
 
-bagASM has been takes Illumina short reads, PacBio/ONT long reads, or both, and produces a decontaminated, polished
-nuclear assembly plus a separately extracted mitochondrial genome.
+bagASM turns raw sequencing reads into a clean genome. Feed it Illumina
+short reads, PacBio or ONT long reads, or both together, and it hands back
+a decontaminated, polished nuclear assembly — plus the mitochondrial
+genome, extracted separately and ready on its own.
 
-See [PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt) for the full flow (all five
-run modes), output layout, and a running list of real-data bugs found and
-fixed, with rationale for each.
+It's built on Nextflow, so it scales from a laptop to a cluster without you
+touching a line of code, and every run picks its own path automatically
+based on whatever reads you point it at.
+
+For the full technical picture — every branch of the pipeline broken down
+by sequencing platform, the output folder layout, and a running log of
+real bugs found (and fixed) along the way — see
+[PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt).
 
 ## Requirements
 
@@ -17,21 +24,38 @@ fixed, with rationale for each.
 
 ## Setup
 
-The GetOrganelle `fungus_mt` reference database downloads automatically on
-first run and is cached in `assets/getorganelle_db/` (override with
-`--getorganelle_db`) — not re-downloaded on later runs. Same idea for
-compleasm's BUSCO lineage data, cached in `assets/compleasm_db/` (override
-with `--compleasm_db`) whenever `--busco_lineage` is set.
+There's nothing to install by hand. The pipeline pulls its own containers,
+and the reference data it needs downloads itself the first time it's
+actually used:
 
-## Usage
+- GetOrganelle's `fungus_mt` database → cached in `assets/getorganelle_db/`
+  (override with `--getorganelle_db`)
+- compleasm's BUSCO lineage data → cached in `assets/compleasm_db/`
+  (override with `--compleasm_db`), only if you ask for `--busco_lineage`
 
-Pull once, then run by GitHub path (no local clone needed):
+After that first run, neither gets downloaded again.
+
+## Get it
 
 ```bash
 nextflow pull GabrieleRigano99/bagASM
 ```
 
-Short reads only:
+No local clone required — `nextflow run GabrieleRigano99/bagASM` works
+straight from that. (If you'd rather work from a checkout, clone the repo
+and run `nextflow run main.nf` the same way; every example below works
+either way.)
+
+## The three ways to run it
+
+There's no mode flag to remember — bagASM looks at which reads you've
+given it and picks the right path itself.
+
+### 1. Short reads only
+
+The classic route: trim with fastp, assemble with SPAdes, scaffold and
+gap-fill with Redundans, strip out organelle contamination with chlomito,
+then polish with Polypolish.
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
@@ -39,26 +63,45 @@ nextflow run GabrieleRigano99/bagASM \
   --strain StrainID --outdir results
 ```
 
-Long reads (optionally with short reads for polishing):
+### 2. Long reads only
+
+Point it at PacBio or ONT reads instead and it assembles with Flye, then
+polishes with whatever suits the platform — medaka for ONT, racon for
+PacBio-CLR, or nothing at all for PacBio-HiFi, which is already accurate
+enough on its own.
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
   --lr reads.fq.gz --lr_type ont \
-  [--r1 R1.fq.gz --r2 R2.fq.gz] \
   --strain StrainID --outdir results
 ```
 
-(Or clone the repo and use `nextflow run main.nf` the same way, if you'd
-rather work from a local checkout.)
+`--lr_type` is one of `ont`, `pacbio-clr`, or `pacbio-hifi`.
 
-`--lr_type` is one of `ont`, `pacbio-clr`, `pacbio-hifi`. Run
-`nextflow run GabrieleRigano99/bagASM --help` for the full option list,
-including multi-lane input (`--r1 a.fq.gz,b.fq.gz`), `--polish_rounds`,
-`--ont_mode`, and the chlomito/medaka tuning knobs.
+### 3. Long reads + short reads
+
+Give it both, and the short reads take over polishing duty from
+medaka/racon — Polypolish tends to do a more thorough job when it has the
+option.
+
+```bash
+nextflow run GabrieleRigano99/bagASM \
+  --lr reads.fq.gz --lr_type ont \
+  --r1 R1.fq.gz --r2 R2.fq.gz \
+  --strain StrainID --outdir results
+```
+
+---
+
+Every one of these accepts `StrainID` and `results` as just placeholders —
+swap in your own sample name and output folder. Run
+`nextflow run GabrieleRigano99/bagASM --help` for the complete option list:
+multi-lane input (`--r1 a.fq.gz,b.fq.gz`), `--polish_rounds`, `--ont_mode`,
+Filtlong/chlomito/medaka tuning, and more.
 
 ## Quality control
 
-QUAST and Qualimap bamqc always run on the final assembly. Add
-`--busco_lineage fungi_odb12` (or any BUSCO lineage name) to also run
-compleasm. `--runmerqury` (short-read mode only) turns on Redundans' own
-bundled Merqury k-mer QV/completeness check.
+Every run finishes with QUAST and Qualimap bamqc checking over the final
+assembly, no flags needed. Add `--busco_lineage fungi_odb12` (or any BUSCO
+lineage name) to also run compleasm. `--runmerqury` (short-read mode only)
+turns on Redundans' own bundled Merqury k-mer QV/completeness check.
