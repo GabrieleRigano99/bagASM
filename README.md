@@ -14,11 +14,15 @@ based on whatever reads you point it at.
 For the full technical picture — every branch of the pipeline broken down
 by sequencing platform, the output folder layout, and a running log of
 real bugs found (and fixed) along the way — see
-[PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt). A friendlier, example-driven
-walkthrough of every parameter lives in [`docs/`](docs/usage.md), built
-with Sphinx and ready to host on Read the Docs — connect this repo at
-[readthedocs.org](https://readthedocs.org) to get it live, or build it
-locally with `pip install -r docs/requirements.txt && sphinx-build -b html docs docs/_build`.
+[PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt).
+
+**[Read the full documentation →](https://gabrielerigano99.github.io/bagASM/)**
+A friendlier, example-driven walkthrough of every parameter, built with
+Sphinx and deployed automatically on every push (see
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml)). It's also set
+up to build on [Read the Docs](https://readthedocs.org) if you connect the
+repo there instead. To build it locally:
+`pip install -r docs/requirements.txt && sphinx-build -b html docs docs/_build`.
 
 ## Requirements
 
