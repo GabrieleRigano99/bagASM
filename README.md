@@ -100,7 +100,7 @@ Every one of these accepts `StrainID` and `results` as just placeholders —
 swap in your own sample name and output folder.
 
 <details>
-<summary><code>nextflow run GabrieleRigano99/bagASM --help</code> (full output)</summary>
+<code>nextflow run GabrieleRigano99/bagASM --help</code> (full output)
 
 ```text
    _                    _    ____  __  __
