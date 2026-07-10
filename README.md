@@ -14,7 +14,11 @@ based on whatever reads you point it at.
 For the full technical picture — every branch of the pipeline broken down
 by sequencing platform, the output folder layout, and a running log of
 real bugs found (and fixed) along the way — see
-[PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt).
+[PIPELINE_SCHEME.txt](PIPELINE_SCHEME.txt). A friendlier, example-driven
+walkthrough of every parameter lives in [`docs/`](docs/usage.md), built
+with Sphinx and ready to host on Read the Docs — connect this repo at
+[readthedocs.org](https://readthedocs.org) to get it live, or build it
+locally with `pip install -r docs/requirements.txt && sphinx-build -b html docs docs/_build`.
 
 ## Requirements
 

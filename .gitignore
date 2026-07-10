@@ -23,3 +23,6 @@ testdata*/
 # OS / editor cruft
 .DS_Store
 *.swp
+
+# Sphinx build output
+docs/_build/
