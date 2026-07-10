@@ -102,10 +102,125 @@ nextflow run GabrieleRigano99/bagASM \
 ---
 
 Every one of these accepts `StrainID` and `results` as just placeholders —
-swap in your own sample name and output folder. Run
-`nextflow run GabrieleRigano99/bagASM --help` for the complete option list:
-multi-lane input (`--r1 a.fq.gz,b.fq.gz`), `--polish_rounds`, `--ont_mode`,
-Filtlong/chlomito/medaka tuning, and more.
+swap in your own sample name and output folder.
+
+<details>
+<summary><code>nextflow run GabrieleRigano99/bagASM --help</code> (full output)</summary>
+
+```text
+   _                    _    ____  __  __
+  | |__   __ _  __ _   / \  / ___||  \/  |
+  | '_ \ / _' |/ _' | / _ \ \___ \| |\/| |
+  | |_) | (_| | (_| |/ ___ \ ___) | |  | |
+  |_.__/ \__,_|\__, /_/   \_\____/|_|  |_|
+               |___/
+
+  bagASM — fungal genome assembly pipeline
+  Version 1.0.0  •  Bioinformatics and Computational Genomics LAB, UniME
+  Main Developer  •  Gabriele Rigano - ORCID https://orcid.org/0009-0008-1928-6789
+
+  USAGE:  nextflow run main.nf [options]
+
+────────────────────────────────────────────────────────────────────────
+  MODE 1  —  short reads only
+────────────────────────────────────────────────────────────────────────
+
+  fastp -> SPAdes -> GetOrganelle -> Redundans -> chlomito -> Polypolish -> rename/sort
+
+    nextflow run main.nf --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
+
+  REQUIRED
+    --r1 / --r2          Illumina paired reads (fastq/fastq.gz)
+    --strain              Strain/sample ID used for output naming
+    --outdir              Output directory
+
+────────────────────────────────────────────────────────────────────────
+  MODE 2  —  long reads only  (PacBio/ONT; switches assembler to Flye)
+────────────────────────────────────────────────────────────────────────
+
+  Filtlong -> Flye -> GetOrganelle -> polish -> rename/sort
+  Filtlong and the polisher are both chosen automatically from --lr_type:
+    ont          -> Filtlong then medaka
+    pacbio-clr   -> Filtlong then racon
+    pacbio-hifi  -> no Filtlong, no polish  (already highly accurate)
+
+    nextflow run main.nf --lr reads.fq.gz --lr_type ont --strain StrainID --outdir results
+
+  REQUIRED
+    --lr                  Long-read FASTQ(.gz)
+    --lr_type             ont | pacbio-clr | pacbio-hifi
+    --strain / --outdir   as in MODE 1
+
+────────────────────────────────────────────────────────────────────────
+  MODE 3  —  long reads + short reads  (short reads polish instead)
+────────────────────────────────────────────────────────────────────────
+
+  Same as MODE 2 through Flye/mitogenome extraction, but --r1/--r2 (if given)
+  always override medaka/racon with Polypolish, regardless of --lr_type.
+
+    nextflow run main.nf --lr reads.fq.gz --lr_type ont \
+        --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
+
+────────────────────────────────────────────────────────────────────────
+  MULTIPLE LANES/RUNS OF THE SAME LIBRARY
+────────────────────────────────────────────────────────────────────────
+
+  Pass a comma-separated list to --r1/--r2/--lr to pool several lanes or
+  runs of one library, e.g.:
+    --r1 L001_R1.fq.gz,L002_R1.fq.gz --r2 L001_R2.fq.gz,L002_R2.fq.gz
+  --r1 and --r2 must list the same number of files, in matching lane order.
+  This is for multiple lanes/runs of the SAME library, not distinct library
+  preps (different insert sizes, mixed PE/MP) — those aren't supported.
+
+────────────────────────────────────────────────────────────────────────
+  OPTIONAL
+────────────────────────────────────────────────────────────────────────
+
+    --species             Organelle type to extract [fungus_mt], passed to
+                          GetOrganelle's -F/-a. One of:
+                            embplant_pt | embplant_mt | embplant_nr | fungus_mt | fungus_nr | animal_mt | other_pt
+                          or several joined by comma, e.g. embplant_pt,embplant_mt
+    --threads             Threads for process_high steps [20]
+    --chlomito_mito_alcr_cutoff  chlomito mitochondrial ALCR cutoff [0.1]  (whenever short reads are given)
+    --chlomito_mito_sdr_cutoff   chlomito mitochondrial SDR cutoff [0.1]  (whenever short reads are given)
+    --ont_mode            Flye ONT preset [hq]: hq (--nano-hq, modern/Dorado-Guppy-sup)
+                          | raw (--nano-raw, R9/low-quality basecalls)  (--lr_type ont only)
+    --filtlong_min_length    Discard reads shorter than this [1000]
+                          (--lr_type ont/pacbio-clr only)
+    --filtlong_keep_percent  Keep only this % of reads by score [90]
+                          (--lr_type ont/pacbio-clr only)
+    --flye_genome_size    Expected genome size, e.g. 35m — Flye -g/--genome-size  (long-read mode only)
+    --flye_asm_coverage   Downsample to this per-base coverage for the initial disjointig
+                          assembly — Flye --asm-coverage; requires --flye_genome_size
+                          (long-read mode only)
+    --medaka_model        Override medaka's auto-detected model  (--lr_type ont only)
+    --skip_lr_decontam    Skip organelle decontamination when long reads are the only input
+                          [false]  (no effect if short reads are also given —
+                          real chlomito always runs there instead)
+    --lr_decontam_alcr_cutoff  ALCR cutoff for --skip_lr_decontam's native long-read
+                          reimplementation [0.1]  (long-read-only mode)
+    --lr_decontam_sdr_cutoff   SDR cutoff, same context [0.1]
+    --polish_rounds       Number of minibwa+Polypolish iterations [3]
+    --runmerqury          Run Redundans' built-in Merqury k-mer QV/completeness [false]  (MODE 1 only)
+    --busco_lineage       BUSCO lineage for compleasm, e.g. fungi_odb12 — if unset, compleasm is skipped
+    --max_memory          Override memory cap for process_high/long steps
+
+────────────────────────────────────────────────────────────────────────
+  QUALITY CONTROL  —  runs on the final assembly in every mode
+────────────────────────────────────────────────────────────────────────
+
+  QUAST (contiguity/gene-prediction stats) and Qualimap bamqc (read-mapping
+  stats, from the assembly's own reads realigned back to it) always run.
+  compleasm (BUSCO-style gene completeness) runs only if --busco_lineage is set.
+
+────────────────────────────────────────────────────────────────────────
+  NOTE: Nextflow reserves single-dash options for its own launcher flags, so
+  inputs are passed as --r1/--r2/--lr (double-dash) rather than the -1/-2
+  convention used by tools like bwa/samtools.
+────────────────────────────────────────────────────────────────────────
+```
+
+</details>
 
 ## Quality control
 
