@@ -74,7 +74,7 @@ CASE 1 — short reads only (--r1 + --r2, no --lr)
   scaffolds.reduced.fa
        |
        v
-  [CHLOMITO] v1   -species fungi -NGS_1 R1 -NGS_2 R2
+  [CHLOMITO] v1   -species <--chlomito_species> -NGS_1 R1 -NGS_2 R2
        |            (identifies/flags mito-contaminated contigs by depth+ALCR;
        |             needs docker.sock mounted through, see CAVEATS below;
        |             writes Reformatted_Genome.fasta as the decontaminated output)
@@ -196,7 +196,7 @@ CASE 5 — long reads + short reads (--lr + --lr_type <any> + --r1 + --r2)
 
   R1.fq.gz  R2.fq.gz  ->  [FASTP]  ->  trimmed reads  (feeds both stops below)
                                             |
-  assembly.fasta  ----------------------->  [CHLOMITO]  -species fungi
+  assembly.fasta  ----------------------->  [CHLOMITO]  -species <--chlomito_species>
                                             |
                                             v
                                      [POLYPOLISH]  --polish_rounds iterations
@@ -454,3 +454,13 @@ CAVEATS / OPEN ITEMS
     gabrielerigano/bagasm-racon:1.0 — correctly kept the first two and
     dropped the mito-duplicate one. Not yet validated against a real
     long-read dataset with genuine organelle contamination.
+
+15. chlomito's own -species flag (confirmed via `chlomito -h`:
+    {animal,plant,fungi}, required by chlomito itself) was hardcoded to
+    "fungi" in modules/chlomito.nf and never exposed as a parameter — it
+    happened to be correct for bagASM's fungal scope but was silently
+    unconfigurable. Now exposed as --chlomito_species (default fungi,
+    validated against the same three values as chlomito itself). This is
+    entirely separate from --species, which only feeds GetOrganelle's
+    -F/-a (embplant_pt, fungus_mt, etc.) — the two flags happen to share a
+    similar name but drive two unrelated tools' organelle-type logic.

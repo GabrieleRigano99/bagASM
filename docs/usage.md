@@ -91,6 +91,7 @@ Parameters specific to this mode:
 | Flag | Default | Meaning |
 |---|---|---|
 | `--species` | `fungus_mt` | Organelle type GetOrganelle extracts — see [Organelle extraction](#organelle-extraction) |
+| `--chlomito_species` | `fungi` | chlomito's own `-species` flag (`animal`/`plant`/`fungi`) — unrelated to `--species` above, which only feeds GetOrganelle |
 | `--chlomito_mito_alcr_cutoff` | `0.1` | chlomito mitochondrial ALCR cutoff |
 | `--chlomito_mito_sdr_cutoff` | `0.1` | chlomito mitochondrial SDR cutoff |
 | `--polish_rounds` | `3` | Number of minibwa + Polypolish iterations |
@@ -173,8 +174,8 @@ still runs for ont/pacbio-clr, the assembler preset is still chosen by
   paired short reads to compute its sequencing-depth-ratio contamination
   metric — so it's skipped whenever long reads are the only input (Mode
   2), but runs here since short reads are available. Same
-  `--chlomito_mito_alcr_cutoff` / `--chlomito_mito_sdr_cutoff` parameters
-  as Mode 1 apply.
+  `--chlomito_species` / `--chlomito_mito_alcr_cutoff` /
+  `--chlomito_mito_sdr_cutoff` parameters as Mode 1 apply.
 
 ---
 

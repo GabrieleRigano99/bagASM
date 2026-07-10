@@ -30,7 +30,7 @@ process CHLOMITO {
     script:
     """
     chlomito \\
-        -species fungi \\
+        -species ${params.chlomito_species} \\
         -raw_genome ${assembly} \\
         -NGS_1 ${r1} -NGS_2 ${r2} \\
         -output ${strain}_chlomito_out \\

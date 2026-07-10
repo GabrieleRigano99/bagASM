@@ -181,6 +181,9 @@ swap in your own sample name and output folder.
                             embplant_pt | embplant_mt | embplant_nr | fungus_mt | fungus_nr | animal_mt | other_pt
                           or several joined by comma, e.g. embplant_pt,embplant_mt
     --threads             Threads for process_high steps [20]
+    --chlomito_species    chlomito's own -species flag [fungi]: animal | plant | fungi
+                          (whenever short reads are given — independent of --species above,
+                          which only feeds GetOrganelle)
     --chlomito_mito_alcr_cutoff  chlomito mitochondrial ALCR cutoff [0.1]  (whenever short reads are given)
     --chlomito_mito_sdr_cutoff   chlomito mitochondrial SDR cutoff [0.1]  (whenever short reads are given)
     --ont_mode            Flye ONT preset [hq]: hq (--nano-hq, modern/Dorado-Guppy-sup)

@@ -144,6 +144,9 @@ ${LN}
                           ${MG}${GETORGANELLE_TYPES.join(' | ')}${R}
                         or several joined by comma, e.g. embplant_pt,embplant_mt
     ${B}--threads${R}            Threads for process_high steps [${params.threads}]
+    ${B}--chlomito_species${R}    chlomito's own -species flag [${params.chlomito_species}]: ${MG}animal | plant | fungi${R}
+                        ${DM}(whenever short reads are given — independent of --species above,${R}
+                        ${DM}which only feeds GetOrganelle)${R}
     ${B}--chlomito_mito_alcr_cutoff${R}  chlomito mitochondrial ALCR cutoff [${params.chlomito_mito_alcr_cutoff}]  ${DM}(whenever short reads are given)${R}
     ${B}--chlomito_mito_sdr_cutoff${R}   chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}]  ${DM}(whenever short reads are given)${R}
     ${B}--ont_mode${R}            Flye ONT preset [${params.ont_mode}]: ${MG}hq${R} (--nano-hq, modern/Dorado-Guppy-sup)
@@ -221,6 +224,10 @@ def species_tokens = params.species.toString().split(',').collect { it.trim() }
 def bad_species = species_tokens - GETORGANELLE_TYPES
 if (bad_species) {
     log.error "--species has invalid value(s) ${bad_species}. Must be one of: ${GETORGANELLE_TYPES.join(', ')} (or several joined by comma)"
+    exit 1
+}
+if (!(params.chlomito_species in ['animal', 'plant', 'fungi'])) {
+    log.error "--chlomito_species must be one of: animal, plant, fungi"
     exit 1
 }
 
