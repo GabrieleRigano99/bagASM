@@ -7,12 +7,14 @@
 //    fallback) -> Redundans -> chlomito -> Polypolish -> rename/sort
 //
 //  Long reads (--lr/--lr_type) present:
-//    Flye -> GetOrganelle (mitogenome, from Flye's .gfa) -> polish -> rename/sort
+//    Flye -> GetOrganelle (mitogenome, from Flye's .gfa) -> decontaminate -> polish -> rename/sort
 //    polishing: Polypolish if short reads are also given, else medaka (ont),
 //    racon (pacbio-clr), or none (pacbio-hifi is already highly accurate)
-//    Redundans/chlomito are skipped in this branch: Flye assemblies are
-//    already long-read-scaffolded, and organelle decontamination was not
-//    requested for this path.
+//    Redundans is never run in this branch: Flye assemblies are already
+//    long-read-scaffolded. Organelle decontamination still happens: real
+//    chlomito if short reads are also given (it needs them for its
+//    depth-ratio metric), otherwise a native ALCR+SDR reimplementation for
+//    long reads alone (DECONTAM_ORGANELLE_LR, see bin/decontam_organelle_lr.py).
 //
 //  Nextflow DSL2
 // ============================================================================
@@ -35,6 +37,7 @@ include { FINALIZE_MITOGENOME as FINALIZE_MITOGENOME_LR } from './modules/finali
 include { REDUNDANS                   } from './modules/redundans'
 include { CHLOMITO                    } from './modules/chlomito'
 include { CHLOMITO as CHLOMITO_LR     } from './modules/chlomito'
+include { DECONTAM_ORGANELLE_LR       } from './modules/decontam_organelle_lr'
 include { POLYPOLISH                            } from './modules/polypolish'
 include { POLYPOLISH as POLYPOLISH_LR           } from './modules/polypolish'
 include { MEDAKA                      } from './modules/medaka'
@@ -141,8 +144,8 @@ ${LN}
                           ${MG}${GETORGANELLE_TYPES.join(' | ')}${R}
                         or several joined by comma, e.g. embplant_pt,embplant_mt
     ${B}--threads${R}            Threads for process_high steps [${params.threads}]
-    ${B}--chlomito_mito_alcr_cutoff${R}  chlomito mitochondrial ALCR cutoff [${params.chlomito_mito_alcr_cutoff}]  ${DM}(MODE 1 only)${R}
-    ${B}--chlomito_mito_sdr_cutoff${R}   chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}]  ${DM}(MODE 1 only)${R}
+    ${B}--chlomito_mito_alcr_cutoff${R}  chlomito mitochondrial ALCR cutoff [${params.chlomito_mito_alcr_cutoff}]  ${DM}(whenever short reads are given)${R}
+    ${B}--chlomito_mito_sdr_cutoff${R}   chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}]  ${DM}(whenever short reads are given)${R}
     ${B}--ont_mode${R}            Flye ONT preset [${params.ont_mode}]: ${MG}hq${R} (--nano-hq, modern/Dorado-Guppy-sup)
                         | ${MG}raw${R} (--nano-raw, R9/low-quality basecalls)  ${DM}(--lr_type ont only)${R}
     ${B}--filtlong_min_length${R}    Discard reads shorter than this [${params.filtlong_min_length}]
@@ -154,6 +157,12 @@ ${LN}
                         assembly — Flye --asm-coverage; requires --flye_genome_size
                         ${DM}(long-read mode only)${R}
     ${B}--medaka_model${R}        Override medaka's auto-detected model  ${DM}(--lr_type ont only)${R}
+    ${B}--skip_lr_decontam${R}    Skip organelle decontamination when long reads are the only input
+                        [${params.skip_lr_decontam}]  ${DM}(no effect if short reads are also given —${R}
+                        ${DM}real chlomito always runs there instead)${R}
+    ${B}--lr_decontam_alcr_cutoff${R}  ALCR cutoff for --skip_lr_decontam's native long-read
+                        reimplementation [${params.lr_decontam_alcr_cutoff}]  ${DM}(long-read-only mode)${R}
+    ${B}--lr_decontam_sdr_cutoff${R}   SDR cutoff, same context [${params.lr_decontam_sdr_cutoff}]
     ${B}--polish_rounds${R}       Number of minibwa+Polypolish iterations [${params.polish_rounds}]
     ${B}--runmerqury${R}          Run Redundans' built-in Merqury k-mer QV/completeness [${params.runmerqury}]  ${DM}(MODE 1 only)${R}
     ${B}--busco_lineage${R}       BUSCO lineage for compleasm, e.g. ${MG}fungi_odb12${R} — if unset, compleasm is skipped
@@ -278,16 +287,35 @@ workflow {
             CHLOMITO_LR(FLYE.out.assembly.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
             POLYPOLISH_LR(CHLOMITO_LR.out.decontaminated.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
             ch_lr_final = POLYPOLISH_LR.out.fasta
-        } else if (params.lr_type == 'ont') {
-            MEDAKA(FLYE.out.assembly.join(ch_lr_reads))
-            ch_lr_final = MEDAKA.out.fasta
-        } else if (params.lr_type == 'pacbio-clr') {
-            RACON(FLYE.out.assembly.join(ch_lr_reads))
-            ch_lr_final = RACON.out.fasta
         } else {
-            // pacbio-hifi, no short reads: Flye's own consensus is already
-            // highly accurate, so no extra polishing pass is applied.
-            ch_lr_final = FLYE.out.assembly
+            // No short reads, so chlomito can't run here at all. Fall back
+            // to a native ALCR+SDR reimplementation for long reads alone
+            // (see bin/decontam_organelle_lr.py), unless skipped.
+            ch_assembly_for_polish = Channel.empty()
+            if (!params.skip_lr_decontam) {
+                DECONTAM_ORGANELLE_LR(
+                    FLYE.out.assembly
+                        .join(FINALIZE_MITOGENOME_LR.out)
+                        .join(ch_lr_reads)
+                        .join(ch_lr.map { strain, lr, type -> tuple(strain, type) })
+                )
+                ch_assembly_for_polish = DECONTAM_ORGANELLE_LR.out.decontaminated
+            } else {
+                ch_assembly_for_polish = FLYE.out.assembly
+            }
+
+            if (params.lr_type == 'ont') {
+                MEDAKA(ch_assembly_for_polish.join(ch_lr_reads))
+                ch_lr_final = MEDAKA.out.fasta
+            } else if (params.lr_type == 'pacbio-clr') {
+                RACON(ch_assembly_for_polish.join(ch_lr_reads))
+                ch_lr_final = RACON.out.fasta
+            } else {
+                // pacbio-hifi: Flye's own consensus is already highly
+                // accurate, so no extra polishing pass runs — but
+                // decontamination (unless skipped) still does.
+                ch_lr_final = ch_assembly_for_polish
+            }
         }
         RENAME_SORT_LR(ch_lr_final)
 

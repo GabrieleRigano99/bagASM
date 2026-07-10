@@ -113,9 +113,19 @@ which assembler preset and which polisher run:
 | `pacbio-clr` | yes | `--pacbio-raw` | racon |
 | `pacbio-hifi` | no | `--pacbio-hifi` | none — HiFi is already ~99.9% accurate |
 
-Redundans and chlomito are **not** run in this mode: Flye assemblies are
-already long-read-scaffolded, and organelle decontamination wasn't
-requested for this path.
+Redundans is **not** run in this mode: Flye assemblies are already
+long-read-scaffolded. chlomito itself doesn't run here either — it has no
+long-read input mode at all, since it requires paired short reads to
+compute its sequencing-depth-ratio contamination metric — but organelle
+decontamination still happens: `DECONTAM_ORGANELLE_LR` reimplements
+chlomito's own two-metric approach (ALCR + SDR) natively from long reads
+alone, using minimap2/samtools instead of chlomito's short-read alignment.
+It runs right after mitogenome extraction, before polishing, for all three
+`--lr_type` values (including `pacbio-hifi`, ahead of the "no polishing"
+step). Skip it with `--skip_lr_decontam` if you'd rather not risk this
+newer, less battle-tested logic — it's currently validated only against
+synthetic data, not yet a real dataset with genuine organelle
+contamination.
 
 Parameters specific to this mode:
 
@@ -128,6 +138,9 @@ Parameters specific to this mode:
 | `--flye_asm_coverage` | unset | Downsample to this per-base coverage for the initial assembly — Flye `--asm-coverage`; requires `--flye_genome_size` |
 | `--medaka_model` | unset (auto-detect) | Override medaka's basecall-based model choice (`ont` only) |
 | `--species` | `fungus_mt` | Same as Mode 1 — GetOrganelle still runs, from Flye's assembly graph |
+| `--skip_lr_decontam` | `false` | Skip `DECONTAM_ORGANELLE_LR` entirely (no effect once short reads are also given — real chlomito takes over instead, see Mode 3) |
+| `--lr_decontam_alcr_cutoff` | `0.1` | `DECONTAM_ORGANELLE_LR`'s alignment-length-coverage-ratio cutoff |
+| `--lr_decontam_sdr_cutoff` | `0.1` | `DECONTAM_ORGANELLE_LR`'s sequencing-depth-ratio cutoff |
 
 :::{warning}
 `--flye_asm_coverage` without `--flye_genome_size` is rejected immediately
@@ -153,12 +166,15 @@ still runs for ont/pacbio-clr, the assembler preset is still chosen by
   using the same `--polish_rounds` parameter as Mode 1. This override
   happens regardless of `--lr_type` — even for `pacbio-hifi`, which
   otherwise skips polishing entirely in Mode 2.
-- **chlomito also runs**, right before Polypolish. chlomito has no
-  long-read input mode at all — it requires paired short reads to compute
-  its sequencing-depth-ratio contamination metric — so it's skipped
-  whenever long reads are the only input (Mode 2), but runs here since
-  short reads are available. Same `--chlomito_mito_alcr_cutoff` /
-  `--chlomito_mito_sdr_cutoff` parameters as Mode 1 apply.
+- **chlomito also runs**, right before Polypolish — and supersedes
+  `DECONTAM_ORGANELLE_LR` entirely (`--skip_lr_decontam`,
+  `--lr_decontam_alcr_cutoff`, `--lr_decontam_sdr_cutoff` all have no
+  effect here). chlomito has no long-read input mode at all — it requires
+  paired short reads to compute its sequencing-depth-ratio contamination
+  metric — so it's skipped whenever long reads are the only input (Mode
+  2), but runs here since short reads are available. Same
+  `--chlomito_mito_alcr_cutoff` / `--chlomito_mito_sdr_cutoff` parameters
+  as Mode 1 apply.
 
 ---
 
@@ -225,7 +241,9 @@ Three execution profiles are available via `-profile`:
 │   ├── spades/                              (short-read mode only)
 │   ├── flye/                                (long-read modes only)
 │   ├── redundans/                           (short-read mode only)
-│   ├── chlomito/                            (short-read mode only)
+│   ├── chlomito/                            (whenever short reads are given: short-read
+│   │                                         or long+short hybrid mode)
+│   ├── decontam_lr/                         (long-read-only mode, unless --skip_lr_decontam)
 │   ├── polished/
 │   └── <strain>_genome.fasta                (final assembly)
 ├── mitochondrion/

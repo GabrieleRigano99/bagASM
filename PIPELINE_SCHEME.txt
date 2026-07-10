@@ -107,6 +107,11 @@ CASE 2 — long reads only, PacBio-HiFi (--lr + --lr_type pacbio-hifi, no --r1/-
        |                                |
        |                                v
        |                  mitochondrion/<strain>_mitogenome.fasta
+       |                                |
+       v                                |
+  [DECONTAM_ORGANELLE_LR]  <-------------+  (native ALCR+SDR reimplementation of
+  chlomito's logic, since chlomito has no long-read input mode; skipped if
+  --skip_lr_decontam)  --lr_decontam_alcr_cutoff  --lr_decontam_sdr_cutoff
        |
        v
   no polishing pass (HiFi is already ~99.9% accurate; Flye's own
@@ -117,9 +122,10 @@ CASE 2 — long reads only, PacBio-HiFi (--lr + --lr_type pacbio-hifi, no --r1/-
        v
   assembly/<strain>_genome.fasta  ->  QUALITY CONTROL (see below)
 
-  NOTE: Redundans is never run in any long-read branch. chlomito isn't run
-  here either (no short reads to compute its depth-ratio metric from), but
-  it DOES run in CASE 5 below, where short reads are available.
+  NOTE: Redundans is never run in any long-read branch. chlomito itself isn't
+  run here (no short reads to compute its depth-ratio metric from) — see
+  DECONTAM_ORGANELLE_LR above for its long-read-only stand-in. Real chlomito
+  DOES run in CASE 5 below, where short reads are available.
 
 
 ================================================================================
@@ -142,6 +148,12 @@ CASE 3 — long reads only, ONT (--lr + --lr_type ont, no --r1/--r2)
   assembly.fasta
        |
        v
+  [DECONTAM_ORGANELLE_LR]  (native ALCR+SDR reimplementation of chlomito's
+  logic against the extracted mitogenome, since chlomito has no long-read
+  input mode; skipped if --skip_lr_decontam)  --lr_decontam_alcr_cutoff
+  --lr_decontam_sdr_cutoff
+       |
+       v
   [MEDAKA] 2.2.2   medaka_consensus -i filtered_long_reads -d assembly
        |            (model auto-detected from the reads unless
        |             --medaka_model is set)
@@ -159,6 +171,10 @@ CASE 4 — long reads only, PacBio-CLR (--lr + --lr_type pacbio-clr, no --r1/--r
   Same as Case 2 through Flye/mitogenome (Flye run with --pacbio-raw), then:
 
   assembly.fasta
+       |
+       v
+  [DECONTAM_ORGANELLE_LR]  (same native ALCR+SDR step as Case 2/3; skipped if
+  --skip_lr_decontam)
        |
        v
   [RACON] 1.5.0   minimap2 -ax map-pb  ->  racon   (uses the filtered reads too)
@@ -412,3 +428,29 @@ CAVEATS / OPEN ITEMS
     without short reads there's nothing to give it. CHLOMITO_LR is a
     separate include-alias of the same modules/chlomito.nf process, per the
     DSL2 same-process-twice restriction described elsewhere in this file.
+
+14. DECONTAM_ORGANELLE_LR (modules/decontam_organelle_lr.nf,
+    bin/decontam_organelle_lr.py) fills the gap chlomito itself leaves in
+    CASE 2/3/4: it's a from-scratch reimplementation of chlomito's own
+    ALCR+SDR logic, computed natively from long reads alone instead of
+    faking a short-read pair. ALCR (alignment length coverage ratio) is the
+    fraction of each contig's length that aligns to the extracted mitogenome
+    (minimap2 -x asm5, contig vs. reference); SDR (sequencing depth ratio) is
+    each contig's mean long-read depth (minimap2 -ax <platform preset> +
+    samtools coverage) divided by the mitogenome reference's own
+    length-weighted mean depth. A contig is dropped only when BOTH clear
+    their cutoff (--lr_decontam_alcr_cutoff, --lr_decontam_sdr_cutoff;
+    default 0.1/0.1, same starting point as chlomito's own), so a contig
+    that merely contains a short HGT-derived mitochondrial fragment (low
+    ALCR) or a nuclear contig at ordinary depth (low SDR) is protected from
+    being flagged. Runs between mitogenome extraction and the
+    platform-specific polishing step in CASE 2/3/4 only — real chlomito
+    always takes over instead the moment short reads are available (CASE 5).
+    Skippable entirely via --skip_lr_decontam, since this logic is novel and
+    far less battle-tested than upstream chlomito. Validated so far only
+    against synthetic data (a 3-contig test: a clean nuclear contig, a
+    mito-duplicate contig at ~6x the depth, and an HGT-like contig
+    containing a small mitochondrial fragment) run for real inside
+    gabrielerigano/bagasm-racon:1.0 — correctly kept the first two and
+    dropped the mito-duplicate one. Not yet validated against a real
+    long-read dataset with genuine organelle contamination.

@@ -68,10 +68,12 @@ nextflow run GabrieleRigano99/bagASM \
 
 ### 2. Long reads only
 
-Point it at PacBio or ONT reads instead and it assembles with Flye, then
-polishes with whatever suits the platform — medaka for ONT, racon for
-PacBio-CLR, or nothing at all for PacBio-HiFi, which is already accurate
-enough on its own.
+Point it at PacBio or ONT reads instead and it assembles with Flye, strips
+out organelle contamination with a native reimplementation of chlomito's
+own detection logic (chlomito itself needs paired short reads, which
+aren't available here), then polishes with whatever suits the platform —
+medaka for ONT, racon for PacBio-CLR, or nothing at all for PacBio-HiFi,
+which is already accurate enough on its own.
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
@@ -85,9 +87,10 @@ nextflow run GabrieleRigano99/bagASM \
 
 Give it both, and the short reads take over polishing duty from
 medaka/racon — Polypolish tends to do a more thorough job when it has the
-option. Having short reads around also means chlomito can run here too,
-stripping organelle contamination the same way it does in short-read-only
-mode (it has no long-read input option, so it sits out Mode 2 entirely).
+option. Having short reads around also means real chlomito can run here
+too, taking over organelle-decontamination duty from Mode 2's native
+reimplementation (chlomito has no long-read input option, so it only
+appears once short reads are in the picture).
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
