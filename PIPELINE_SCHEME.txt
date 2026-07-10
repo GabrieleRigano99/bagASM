@@ -23,10 +23,11 @@ plumbing into SPAdes/Redundans instead of simple pooling.
   Short reads: pooled by concatenating all R1 files together and all R2
     files together inside FASTP, before trimming (valid: concatenated
     multi-member gzip is read correctly by fastp).
-  Long reads:  passed straight through to Flye, which natively accepts
-    multiple read files after the platform flag. For medaka/racon (which
-    each take only one reads file), the long-read files are pooled by
-    concatenation first, same as short reads.
+  Long reads:  passed straight through to Flye (which natively accepts
+    multiple read files after the platform flag) when Filtlong doesn't run
+    (--lr_type pacbio-hifi). For ont/pacbio-clr, Filtlong itself pools all
+    files by concatenation before filtering, so Flye/medaka/racon/QC
+    alignment all end up working from that one filtered file regardless.
 
 
 ================================================================================
@@ -91,7 +92,7 @@ CASE 2 — long reads only, PacBio-HiFi (--lr + --lr_type pacbio-hifi, no --r1/-
 ================================================================================
 
   long_reads.fq.gz
-       |
+       |            (no Filtlong for pacbio-hifi — already highly accurate)
        v
   [FLYE] 2.9.6  --pacbio-hifi
        |
@@ -123,6 +124,13 @@ CASE 2 — long reads only, PacBio-HiFi (--lr + --lr_type pacbio-hifi, no --r1/-
 CASE 3 — long reads only, ONT (--lr + --lr_type ont, no --r1/--r2)
 ================================================================================
 
+  long_reads.fq.gz
+       |
+       v
+  [FILTLONG] 0.3.1   --min_length --filtlong_min_length --keep_percent --filtlong_keep_percent
+       |               (drops short/low-scoring reads before assembly; medaka and the
+       |                QC read-mapping step below both use these filtered reads too)
+       v
   Same as Case 2 through Flye/mitogenome, with Flye's ONT preset chosen by
   --ont_mode (default hq):
     --ont_mode hq  (default) -> Flye --nano-hq   (modern/Dorado-Guppy-sup basecalls)
@@ -132,7 +140,7 @@ CASE 3 — long reads only, ONT (--lr + --lr_type ont, no --r1/--r2)
   assembly.fasta
        |
        v
-  [MEDAKA] 2.2.2   medaka_consensus -i long_reads -d assembly
+  [MEDAKA] 2.2.2   medaka_consensus -i filtered_long_reads -d assembly
        |            (model auto-detected from the reads unless
        |             --medaka_model is set)
        v
@@ -145,12 +153,13 @@ CASE 3 — long reads only, ONT (--lr + --lr_type ont, no --r1/--r2)
 CASE 4 — long reads only, PacBio-CLR (--lr + --lr_type pacbio-clr, no --r1/--r2)
 ================================================================================
 
+  long_reads.fq.gz -> [FILTLONG] 0.3.1 (same as Case 3's, before Flye) ->
   Same as Case 2 through Flye/mitogenome (Flye run with --pacbio-raw), then:
 
   assembly.fasta
        |
        v
-  [RACON] 1.5.0   minimap2 -ax map-pb  ->  racon
+  [RACON] 1.5.0   minimap2 -ax map-pb  ->  racon   (uses the filtered reads too)
        v
   [RENAME_SORT]
        v
@@ -161,7 +170,8 @@ CASE 4 — long reads only, PacBio-CLR (--lr + --lr_type pacbio-clr, no --r1/--r
 CASE 5 — long reads + short reads (--lr + --lr_type <any> + --r1 + --r2)
 ================================================================================
 
-  Same as Case 2/3/4 through Flye/mitogenome (assembler/preset chosen by
+  Same as Case 2/3/4 through Flye/mitogenome (Filtlong still runs before Flye
+  for ont/pacbio-clr exactly as in those cases; assembler/preset chosen by
   --lr_type as above), but the short reads override medaka/racon/no-polish:
 
   R1.fq.gz  R2.fq.gz  ->  [FASTP]  ->  trimmed reads
@@ -211,10 +221,11 @@ QUALITY CONTROL — runs on assembly/<strain>_genome.fasta in every case
 OUTPUT LAYOUT (<outdir>/...)
 ================================================================================
 
-  trimmed_reads/                              (only if --r1/--r2 given)
-    <strain>_R1.trimmed.fastq.gz
+  trimmed_reads/
+    <strain>_R1.trimmed.fastq.gz               (only if --r1/--r2 given)
     <strain>_R2.trimmed.fastq.gz
     <strain>.fastp.html / .json
+    <strain>_lr.filtered.fastq.gz               (only if --lr_type ont/pacbio-clr)
 
   assembly/
     spades/                                   (short-read branch only)
@@ -373,3 +384,12 @@ CAVEATS / OPEN ITEMS
     (map-ont/map-pb/map-hifi) for the long-read branch. In the long+short
     hybrid case, only the long reads are used for this QC alignment, not
     whichever reads actually polished the assembly.
+
+12. Filtlong 0.3.1 runs before Flye for --lr_type ont/pacbio-clr (dropping
+    short/low-scoring reads: --filtlong_min_length [default 1000],
+    --filtlong_keep_percent [default 90] — Filtlong's own recommended
+    starting point). Skipped for pacbio-hifi, which is already ~99.9%
+    accurate. When it runs, every downstream long-read consumer (Flye,
+    medaka/racon, the QC read-mapping alignment) uses the filtered reads,
+    not the originals — there's no way to opt one of them back into the
+    unfiltered input short of disabling Filtlong for the whole run.

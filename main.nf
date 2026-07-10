@@ -24,6 +24,7 @@ nextflow.enable.dsl = 2
 // across mutually-exclusive if/else branches.
 include { FASTP                       } from './modules/fastp'
 include { SPADES                      } from './modules/spades'
+include { FILTLONG                    } from './modules/filtlong'
 include { FLYE                        } from './modules/flye'
 include { GET_ORGANELLE_SETUP         } from './modules/get_organelle_setup'
 include { GET_ORGANELLE_FROM_ASSEMBLY                                  } from './modules/get_organelle_from_assembly'
@@ -96,11 +97,11 @@ ${LN}
   ${CY}${B}MODE 2${R}  —  long reads only  ${DM}(PacBio/ONT; switches assembler to Flye)${R}
 ${LN}
 
-  ${DM}Flye -> GetOrganelle -> polish -> rename/sort${R}
-  ${DM}polisher is chosen automatically from --lr_type:${R}
-    ${DM}ont          -> medaka${R}
-    ${DM}pacbio-clr   -> racon${R}
-    ${DM}pacbio-hifi  -> none  ${DM}(Flye's own consensus is already highly accurate)${R}
+  ${DM}Filtlong -> Flye -> GetOrganelle -> polish -> rename/sort${R}
+  ${DM}Filtlong and the polisher are both chosen automatically from --lr_type:${R}
+    ${DM}ont          -> Filtlong then medaka${R}
+    ${DM}pacbio-clr   -> Filtlong then racon${R}
+    ${DM}pacbio-hifi  -> no Filtlong, no polish  ${DM}(already highly accurate)${R}
 
     nextflow run main.nf --lr reads.fq.gz --lr_type ont --strain StrainID --outdir results
 
@@ -143,6 +144,10 @@ ${LN}
     ${B}--chlomito_mito_sdr_cutoff${R}   chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}]  ${DM}(MODE 1 only)${R}
     ${B}--ont_mode${R}            Flye ONT preset [${params.ont_mode}]: ${MG}hq${R} (--nano-hq, modern/Dorado-Guppy-sup)
                         | ${MG}raw${R} (--nano-raw, R9/low-quality basecalls)  ${DM}(--lr_type ont only)${R}
+    ${B}--filtlong_min_length${R}    Discard reads shorter than this [${params.filtlong_min_length}]
+                        ${DM}(--lr_type ont/pacbio-clr only)${R}
+    ${B}--filtlong_keep_percent${R}  Keep only this % of reads by score [${params.filtlong_keep_percent}]
+                        ${DM}(--lr_type ont/pacbio-clr only)${R}
     ${B}--flye_genome_size${R}    Expected genome size, e.g. ${MG}35m${R} — Flye -g/--genome-size  ${DM}(long-read mode only)${R}
     ${B}--flye_asm_coverage${R}   Downsample to this per-base coverage for the initial disjointig
                         assembly — Flye --asm-coverage; requires --flye_genome_size
@@ -243,15 +248,25 @@ workflow {
     if (has_lr) {
         // ── Long-read assembly branch ──────────────────────────────────────
         ch_lr = Channel.of(tuple(params.strain, lr_files, params.lr_type))
-        FLYE(ch_lr)
+
+        // Filtlong: drop short/low-scoring reads before assembly for the
+        // noisier platforms; skipped for pacbio-hifi, which is already
+        // highly accurate. Downstream steps (Flye, medaka/racon, QC
+        // alignment) all use the filtered reads when this runs.
+        if (params.lr_type in ['ont', 'pacbio-clr']) {
+            FILTLONG(ch_lr.map { strain, lr, type -> tuple(strain, lr) })
+            ch_lr_reads = FILTLONG.out.reads.map { strain, f -> tuple(strain, [f]) }
+        } else {
+            ch_lr_reads = ch_lr.map { strain, lr, type -> tuple(strain, lr) }
+        }
+
+        FLYE(ch_lr_reads.join(ch_lr.map { strain, lr, type -> tuple(strain, type) }))
 
         GET_ORGANELLE_FROM_ASSEMBLY_LR(FLYE.out.graph, GET_ORGANELLE_SETUP.out.label_db)
         FINALIZE_MITOGENOME_LR(
             GET_ORGANELLE_FROM_ASSEMBLY_LR.out.result
                 .map { strain, fasta, n_seqs -> tuple(strain, fasta) }
         )
-
-        ch_lr_reads = ch_lr.map { strain, lr, type -> tuple(strain, lr) }
 
         ch_lr_final = Channel.empty()
         if (has_sr) {
