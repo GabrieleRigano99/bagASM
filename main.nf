@@ -135,6 +135,10 @@ ${LN}
     ${B}--chlomito_mito_sdr_cutoff${R}   chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}]  ${DM}(MODE 1 only)${R}
     ${B}--ont_mode${R}            Flye ONT preset [${params.ont_mode}]: ${MG}hq${R} (--nano-hq, modern/Dorado-Guppy-sup)
                         | ${MG}raw${R} (--nano-raw, R9/low-quality basecalls)  ${DM}(--lr_type ont only)${R}
+    ${B}--flye_genome_size${R}    Expected genome size, e.g. ${MG}35m${R} — Flye -g/--genome-size  ${DM}(long-read mode only)${R}
+    ${B}--flye_asm_coverage${R}   Downsample to this per-base coverage for the initial disjointig
+                        assembly — Flye --asm-coverage; requires --flye_genome_size
+                        ${DM}(long-read mode only)${R}
     ${B}--medaka_model${R}        Override medaka's auto-detected model  ${DM}(--lr_type ont only)${R}
     ${B}--polish_rounds${R}       Number of minibwa+Polypolish iterations [${params.polish_rounds}]
     ${B}--max_memory${R}          Override memory cap for process_high/long steps
@@ -170,6 +174,10 @@ if (has_lr && !(params.lr_type in ['ont', 'pacbio-clr', 'pacbio-hifi'])) {
 }
 if (!(params.ont_mode in ['hq', 'raw'])) {
     log.error "--ont_mode must be one of: hq, raw"
+    exit 1
+}
+if (params.flye_asm_coverage && !params.flye_genome_size) {
+    log.error "--flye_asm_coverage requires --flye_genome_size (Flye needs a genome size estimate to downsample coverage against)"
     exit 1
 }
 if (!(params.polish_rounds instanceof Integer) || params.polish_rounds < 1) {

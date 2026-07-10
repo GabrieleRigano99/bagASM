@@ -290,3 +290,12 @@ CAVEATS / OPEN ITEMS
    number of minibwa+Polypolish iterations [default 3, was previously
    hardcoded]. Validated end-to-end on real data (SG03): 3 rounds completed
    in ~8.5 min on a ~37 MB / 208-contig assembly with ~7.15M read pairs.
+
+8. Flye's genome-size/coverage-limiting flags are exposed for the long-read
+   branch: --flye_genome_size (e.g. '35m', Flye -g/--genome-size) and
+   --flye_asm_coverage (int, Flye --asm-coverage — downsamples to that
+   per-base coverage for the initial disjointig assembly, speeding up
+   high-coverage runs). Both are optional and null by default (Flye runs
+   without a size estimate, using its own coverage). Flye itself refuses
+   --asm-coverage without a genome-size estimate, so the pipeline validates
+   that combination up front rather than letting Flye fail mid-run.

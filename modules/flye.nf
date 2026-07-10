@@ -25,13 +25,17 @@ process FLYE {
     if (!read_flag) {
         error "Unknown --lr_type '${lr_type}': expected ont, pacbio-clr or pacbio-hifi"
     }
+    def genome_size_opt = params.flye_genome_size ? "--genome-size ${params.flye_genome_size}" : ''
+    def asm_coverage_opt = params.flye_asm_coverage ? "--asm-coverage ${params.flye_asm_coverage}" : ''
     """
     # Flye accepts multiple files (e.g. several runs/flowcells of the same
     # library) directly after the platform flag, no concatenation needed.
     flye \\
         ${read_flag} ${lr.join(' ')} \\
         --out-dir flye_out \\
-        --threads ${task.cpus}
+        --threads ${task.cpus} \\
+        ${genome_size_opt} \\
+        ${asm_coverage_opt}
 
     cp flye_out/assembly.fasta ${strain}_flye_assembly.fasta
     cp flye_out/assembly_graph.gfa ${strain}_flye_assembly_graph.gfa
