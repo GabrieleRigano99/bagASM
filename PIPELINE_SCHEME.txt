@@ -83,7 +83,7 @@ CASE 1 — short reads only (--r1 + --r2, no --lr)
        v
   [RENAME_SORT]  seqkit sort --by-length --reverse | rename to <strain>_scaffold_N
        v
-  assembly/<strain>_genome.fasta
+  assembly/<strain>_genome.fasta  ->  QUALITY CONTROL (see below)
 
 
 ================================================================================
@@ -114,7 +114,7 @@ CASE 2 — long reads only, PacBio-HiFi (--lr + --lr_type pacbio-hifi, no --r1/-
        v
   [RENAME_SORT]
        v
-  assembly/<strain>_genome.fasta
+  assembly/<strain>_genome.fasta  ->  QUALITY CONTROL (see below)
 
   NOTE: Redundans and chlomito are NOT run in any long-read branch.
 
@@ -138,7 +138,7 @@ CASE 3 — long reads only, ONT (--lr + --lr_type ont, no --r1/--r2)
        v
   [RENAME_SORT]
        v
-  assembly/<strain>_genome.fasta
+  assembly/<strain>_genome.fasta  ->  QUALITY CONTROL (see below)
 
 
 ================================================================================
@@ -154,7 +154,7 @@ CASE 4 — long reads only, PacBio-CLR (--lr + --lr_type pacbio-clr, no --r1/--r
        v
   [RENAME_SORT]
        v
-  assembly/<strain>_genome.fasta
+  assembly/<strain>_genome.fasta  ->  QUALITY CONTROL (see below)
 
 
 ================================================================================
@@ -172,10 +172,39 @@ CASE 5 — long reads + short reads (--lr + --lr_type <any> + --r1 + --r2)
                                      [RENAME_SORT]
                                             |
                                             v
-                              assembly/<strain>_genome.fasta
+                              assembly/<strain>_genome.fasta  ->  QC (see below)
 
   This is true regardless of --lr_type (ont / pacbio-clr / pacbio-hifi):
   medaka and racon are only used when short reads are absent.
+
+
+================================================================================
+QUALITY CONTROL — runs on assembly/<strain>_genome.fasta in every case
+================================================================================
+
+  assembly/<strain>_genome.fasta
+       |
+       +----------------------------------+----------------------------------+
+       |                                  |                                  |
+       v                                  v                                  v
+  [QUAST] 5.3.0                [ALIGN_*_FOR_QC]                    [COMPLEASM] 0.2.8
+  --fungus --eukaryote     minibwa (short-read branch) or       (only if --busco_lineage
+  reference-free            minimap2 -x map-ont/map-pb/          is set — otherwise this
+  contiguity/gene stats     map-hifi (long-read branch),          branch is skipped)
+       |                    realigning the run's own reads              |
+       v                    back onto the final assembly                v
+  qc/quast/<strain>_quast/          |                          qc/compleasm/<strain>_compleasm/
+                                     v
+                            [QUALIMAP_BAMQC] 2.3
+                            read-mapping/coverage stats
+                                     |
+                                     v
+                        qc/qualimap/<strain>_qualimap/
+
+  Separately, --runmerqury (short-read branch only, default off) enables
+  Redundans' own bundled Merqury integration during the REDUNDANS step
+  itself (k-mer-based QV/completeness, no reference needed) — see CASE 1
+  and CAVEATS.
 
 
 ================================================================================
@@ -190,7 +219,7 @@ OUTPUT LAYOUT (<outdir>/...)
   assembly/
     spades/                                   (short-read branch only)
       <strain>_scaffolds.fasta
-      <strain>_assembly_graph_with_scaffolds.gfa
+      <strain>_assembly_graph.fastg
       <strain>_spades.log
     flye/                                      (long-read branch only)
       <strain>_flye_assembly.fasta
@@ -199,7 +228,9 @@ OUTPUT LAYOUT (<outdir>/...)
     redundans/                                 (short-read branch only)
       <strain>_redundans_scaffolds.fasta
     chlomito/                                  (short-read branch only)
-      <strain>_chlomito_out/   (raw chlomito output dir; see CAVEATS)
+      <strain>_chlomito_out/
+        Reformatted_Genome.fasta   (the decontaminated assembly Polypolish consumes)
+        organelle_db/               (chlomito's own internal mito/chlo reference + BLAST dbs)
     polished/
       <strain>_polished.fasta                  (Polypolish, medaka, or racon output)
     <strain>_genome.fasta                      (final: renamed + sorted by length)
@@ -208,6 +239,11 @@ OUTPUT LAYOUT (<outdir>/...)
     get_organelle_from_assembly/               (short-read branch only)
     get_organelle_from_reads/                  (short-read branch only, if fallback triggered)
     <strain>_mitogenome.fasta                   (final result, either branch)
+
+  qc/                                          (see QUALITY CONTROL above)
+    quast/<strain>_quast/
+    qualimap/<strain>_qualimap/
+    compleasm/<strain>_compleasm/               (only if --busco_lineage is set)
 
   pipeline_info/
     execution_report.html / execution_timeline.html / execution_trace.txt
@@ -236,13 +272,16 @@ CAVEATS / OPEN ITEMS
    modules/chlomito.nf now uses gabrielerigano/bagasm-chlomito:1.0 (built from
    docker/chlomito_fix, which just chmods /root to a+rX) instead.
 
-3. [RESOLVED] The three custom images (gabrielerigano/bagasm-polish:1.0,
-   bagasm-racon:1.0, bagasm-chlomito:1.0) are published on Docker Hub and
-   pulled automatically — no manual build needed on a new host. The
-   docker/*/Dockerfile sources stay in the repo for rebuilds only:
-     docker build -t gabrielerigano/bagasm-polish:1.0   docker/polish_env
-     docker build -t gabrielerigano/bagasm-racon:1.0    docker/racon_env
-     docker build -t gabrielerigano/bagasm-chlomito:1.0 docker/chlomito_fix
+3. [RESOLVED] The four custom images (gabrielerigano/bagasm-polish:1.0,
+   bagasm-racon:1.0, bagasm-chlomito:1.0, bagasm-redundans:1.0) are published
+   on Docker Hub and pulled automatically — no manual build needed on a new
+   host. bagasm-racon also carries samtools now, reused by ALIGN_LR_FOR_QC
+   (see QUALITY CONTROL). The docker/*/Dockerfile sources stay in the repo
+   for rebuilds only:
+     docker build -t gabrielerigano/bagasm-polish:1.0    docker/polish_env
+     docker build -t gabrielerigano/bagasm-racon:1.0     docker/racon_env
+     docker build -t gabrielerigano/bagasm-chlomito:1.0  docker/chlomito_fix
+     docker build -t gabrielerigano/bagasm-redundans:1.0 docker/redundans_fix
 
 4. Inputs are --r1/--r2/--lr (double-dash), not the -1/-2 convention of
    bwa/samtools — Nextflow reserves single-dash flags for its own launcher.
@@ -299,3 +338,38 @@ CAVEATS / OPEN ITEMS
    without a size estimate, using its own coverage). Flye itself refuses
    --asm-coverage without a genome-size estimate, so the pipeline validates
    that combination up front rather than letting Flye fail mid-run.
+
+9. --runmerqury (Redundans' own bundled Merqury k-mer QV/completeness)
+   crashes 100% of the time under the stock biocontainers redundans image:
+   its meryl integration calls `cp -t DEST SRC...`, but that image ships
+   only BusyBox coreutils, whose `cp` doesn't support `-t`
+   ("cp: invalid option -- 't'"), which then cascades into a Python
+   ValueError parsing meryl's (never-written) output. Confirmed on a full
+   real dataset (SG04, ~40 MB assembly, 7.5M read pairs), not just a small
+   toy case. Fixed via gabrielerigano/bagasm-redundans:1.0
+   (docker/redundans_fix), which shadows BusyBox's cp with a tiny shim that
+   translates `-t DEST SRC...` to BusyBox-compatible `SRC... DEST` and
+   defers to BusyBox for every other invocation. --runmerqury itself
+   defaults to off (meryl k-mer counting over the full read set adds real
+   runtime) and only applies to the short-read branch (Redundans doesn't
+   run in the long-read branch). Re-confirmed on the same real dataset with
+   the shim in place: completes in ~9 min, producing a real QV of 46.86
+   (~1 error per 46,000 bp) plus spectra-cn plots and histograms.
+
+10. compleasm (--busco_lineage) manages its own lineage-download caching
+    inside --library_path (--compleasm_db, default assets/compleasm_db) —
+    no separate setup process needed, unlike GetOrganelle. That directory
+    must exist, created by the host user, before Docker bind-mounts it in;
+    main.nf creates it up front for exactly this reason. If Docker were
+    left to auto-create the bind-mount source instead, it would do so as
+    root, and compleasm (running as the pipeline's non-root user) wouldn't
+    be able to write the downloaded lineage into it.
+
+11. QUAST, Qualimap bamqc, and (if --busco_lineage is set) compleasm all run
+    on the final assembly.fasta in every mode. The Qualimap bamqc input BAM
+    comes from realigning the run's own reads back onto the final assembly
+    — minibwa (paired, unlike Polypolish's separate-mate alignment) for the
+    short-read branch, minimap2 with the platform-appropriate preset
+    (map-ont/map-pb/map-hifi) for the long-read branch. In the long+short
+    hybrid case, only the long reads are used for this QC alignment, not
+    whichever reads actually polished the assembly.

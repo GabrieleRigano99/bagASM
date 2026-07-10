@@ -39,6 +39,14 @@ include { MEDAKA                      } from './modules/medaka'
 include { RACON                       } from './modules/racon'
 include { RENAME_SORT                          } from './modules/rename_sort'
 include { RENAME_SORT as RENAME_SORT_LR        } from './modules/rename_sort'
+include { QUAST                                } from './modules/quast'
+include { QUAST as QUAST_LR                    } from './modules/quast'
+include { COMPLEASM                            } from './modules/compleasm'
+include { COMPLEASM as COMPLEASM_LR            } from './modules/compleasm'
+include { ALIGN_SR_FOR_QC                      } from './modules/align_sr_for_qc'
+include { ALIGN_LR_FOR_QC                      } from './modules/align_lr_for_qc'
+include { QUALIMAP_BAMQC                       } from './modules/qualimap_bamqc'
+include { QUALIMAP_BAMQC as QUALIMAP_BAMQC_LR  } from './modules/qualimap_bamqc'
 
 // GetOrganelle's own -F/-a organelle-type vocabulary (get_organelle_from_assembly.py,
 // get_organelle_from_reads.py, get_organelle_config.py); "anonym" is deliberately
@@ -141,7 +149,17 @@ ${LN}
                         ${DM}(long-read mode only)${R}
     ${B}--medaka_model${R}        Override medaka's auto-detected model  ${DM}(--lr_type ont only)${R}
     ${B}--polish_rounds${R}       Number of minibwa+Polypolish iterations [${params.polish_rounds}]
+    ${B}--runmerqury${R}          Run Redundans' built-in Merqury k-mer QV/completeness [${params.runmerqury}]  ${DM}(MODE 1 only)${R}
+    ${B}--busco_lineage${R}       BUSCO lineage for compleasm, e.g. ${MG}fungi_odb12${R} — if unset, compleasm is skipped
     ${B}--max_memory${R}          Override memory cap for process_high/long steps
+
+${LN}
+  ${CY}${B}QUALITY CONTROL${R}  —  runs on the final assembly in every mode
+${LN}
+
+  ${DM}QUAST (contiguity/gene-prediction stats) and Qualimap bamqc (read-mapping${R}
+  ${DM}stats, from the assembly's own reads realigned back to it) always run.${R}
+  ${DM}compleasm (BUSCO-style gene completeness) runs only if --busco_lineage is set.${R}
 
 ${LN}
   ${DM}NOTE: Nextflow reserves single-dash options for its own launcher flags, so${R}
@@ -202,6 +220,13 @@ if (has_sr && r1_files.size() != r2_files.size()) {
 }
 def lr_files = has_lr ? splitFiles(params.lr) : []
 
+// compleasm manages its own download-caching inside --library_path, but that
+// directory must exist (owned by the host user) before Docker bind-mounts it
+// — otherwise Docker auto-creates it as root and compleasm can't write to it.
+if (params.busco_lineage) {
+    file(params.compleasm_db).mkdirs()
+}
+
 workflow {
 
     // Downloaded once into params.getorganelle_db and cached across runs
@@ -245,6 +270,14 @@ workflow {
         }
         RENAME_SORT_LR(ch_lr_final)
 
+        // ── QC: contiguity, gene completeness, read-mapping stats ──────────
+        QUAST_LR(RENAME_SORT_LR.out.fasta)
+        if (params.busco_lineage) {
+            COMPLEASM_LR(RENAME_SORT_LR.out.fasta)
+        }
+        ALIGN_LR_FOR_QC(RENAME_SORT_LR.out.fasta.join(ch_lr_reads).join(ch_lr.map { strain, lr, type -> tuple(strain, type) }))
+        QUALIMAP_BAMQC_LR(ALIGN_LR_FOR_QC.out.bam)
+
     } else {
         // ── Short-read-only assembly branch ────────────────────────────────
         SPADES(ch_trimmed)
@@ -281,5 +314,13 @@ workflow {
         POLYPOLISH(ch_for_polish)
 
         RENAME_SORT(POLYPOLISH.out.fasta)
+
+        // ── QC: contiguity, gene completeness, read-mapping stats ──────────
+        QUAST(RENAME_SORT.out.fasta)
+        if (params.busco_lineage) {
+            COMPLEASM(RENAME_SORT.out.fasta)
+        }
+        ALIGN_SR_FOR_QC(RENAME_SORT.out.fasta.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
+        QUALIMAP_BAMQC(ALIGN_SR_FOR_QC.out.bam)
     }
 }

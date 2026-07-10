@@ -19,7 +19,9 @@ fixed, with rationale for each.
 
 The GetOrganelle `fungus_mt` reference database downloads automatically on
 first run and is cached in `assets/getorganelle_db/` (override with
-`--getorganelle_db`) — not re-downloaded on later runs.
+`--getorganelle_db`) — not re-downloaded on later runs. Same idea for
+compleasm's BUSCO lineage data, cached in `assets/compleasm_db/` (override
+with `--compleasm_db`) whenever `--busco_lineage` is set.
 
 ## Usage
 
@@ -53,3 +55,10 @@ rather work from a local checkout.)
 `nextflow run GabrieleRigano99/bagASM --help` for the full option list,
 including multi-lane input (`--r1 a.fq.gz,b.fq.gz`), `--polish_rounds`,
 `--ont_mode`, and the chlomito/medaka tuning knobs.
+
+## Quality control
+
+QUAST and Qualimap bamqc always run on the final assembly. Add
+`--busco_lineage fungi_odb12` (or any BUSCO lineage name) to also run
+compleasm. `--runmerqury` (short-read mode only) turns on Redundans' own
+bundled Merqury k-mer QV/completeness check.
