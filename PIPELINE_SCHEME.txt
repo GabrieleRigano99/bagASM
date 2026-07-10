@@ -117,7 +117,9 @@ CASE 2 — long reads only, PacBio-HiFi (--lr + --lr_type pacbio-hifi, no --r1/-
        v
   assembly/<strain>_genome.fasta  ->  QUALITY CONTROL (see below)
 
-  NOTE: Redundans and chlomito are NOT run in any long-read branch.
+  NOTE: Redundans is never run in any long-read branch. chlomito isn't run
+  here either (no short reads to compute its depth-ratio metric from), but
+  it DOES run in CASE 5 below, where short reads are available.
 
 
 ================================================================================
@@ -172,11 +174,16 @@ CASE 5 — long reads + short reads (--lr + --lr_type <any> + --r1 + --r2)
 
   Same as Case 2/3/4 through Flye/mitogenome (Filtlong still runs before Flye
   for ont/pacbio-clr exactly as in those cases; assembler/preset chosen by
-  --lr_type as above), but the short reads override medaka/racon/no-polish:
+  --lr_type as above), but the short reads override medaka/racon/no-polish —
+  and, since short reads are available, chlomito now runs too (it can't in
+  Case 2/3/4: no short reads to compute its depth-ratio metric from):
 
-  R1.fq.gz  R2.fq.gz  ->  [FASTP]  ->  trimmed reads
+  R1.fq.gz  R2.fq.gz  ->  [FASTP]  ->  trimmed reads  (feeds both stops below)
                                             |
-  assembly.fasta  ----------------------->  [POLYPOLISH] --polish_rounds iterations
+  assembly.fasta  ----------------------->  [CHLOMITO]  -species fungi
+                                            |
+                                            v
+                                     [POLYPOLISH]  --polish_rounds iterations
                                             |
                                             v
                                      [RENAME_SORT]
@@ -185,7 +192,9 @@ CASE 5 — long reads + short reads (--lr + --lr_type <any> + --r1 + --r2)
                               assembly/<strain>_genome.fasta  ->  QC (see below)
 
   This is true regardless of --lr_type (ont / pacbio-clr / pacbio-hifi):
-  medaka and racon are only used when short reads are absent.
+  medaka and racon are only used when short reads are absent, and chlomito
+  only runs when short reads ARE present (i.e. never in Case 2/3/4, always
+  here in Case 5).
 
 
 ================================================================================
@@ -393,3 +402,13 @@ CAVEATS / OPEN ITEMS
     medaka/racon, the QC read-mapping alignment) uses the filtered reads,
     not the originals — there's no way to opt one of them back into the
     unfiltered input short of disabling Filtlong for the whole run.
+
+13. chlomito now also runs in CASE 5 (long+short hybrid), inserted between
+    Flye's assembly and Polypolish, using the same trimmed short reads that
+    polish it. It still doesn't run in CASE 2/3/4 (long-read-only): chlomito
+    has no long-read input option at all (confirmed against its own -h
+    output, not just its README — -NGS_1/-NGS_2 are both required, paired
+    short-read files, used for its sequencing-depth-ratio metric), so
+    without short reads there's nothing to give it. CHLOMITO_LR is a
+    separate include-alias of the same modules/chlomito.nf process, per the
+    DSL2 same-process-twice restriction described elsewhere in this file.

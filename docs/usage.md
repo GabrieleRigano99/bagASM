@@ -147,11 +147,18 @@ nextflow run GabrieleRigano99/bagASM \
 
 Identical to Mode 2 through assembly and mitogenome extraction (Filtlong
 still runs for ont/pacbio-clr, the assembler preset is still chosen by
-`--lr_type`), but whenever short reads are also given, they take over
-polishing from medaka/racon: Polypolish runs instead, using the same
-`--polish_rounds` parameter as Mode 1. This override happens regardless of
-`--lr_type` — even for `pacbio-hifi`, which otherwise skips polishing
-entirely in Mode 2.
+`--lr_type`), but whenever short reads are also given:
+
+- they take over polishing from medaka/racon: Polypolish runs instead,
+  using the same `--polish_rounds` parameter as Mode 1. This override
+  happens regardless of `--lr_type` — even for `pacbio-hifi`, which
+  otherwise skips polishing entirely in Mode 2.
+- **chlomito also runs**, right before Polypolish. chlomito has no
+  long-read input mode at all — it requires paired short reads to compute
+  its sequencing-depth-ratio contamination metric — so it's skipped
+  whenever long reads are the only input (Mode 2), but runs here since
+  short reads are available. Same `--chlomito_mito_alcr_cutoff` /
+  `--chlomito_mito_sdr_cutoff` parameters as Mode 1 apply.
 
 ---
 

@@ -34,6 +34,7 @@ include { FINALIZE_MITOGENOME                          } from './modules/finaliz
 include { FINALIZE_MITOGENOME as FINALIZE_MITOGENOME_LR } from './modules/finalize_mitogenome'
 include { REDUNDANS                   } from './modules/redundans'
 include { CHLOMITO                    } from './modules/chlomito'
+include { CHLOMITO as CHLOMITO_LR     } from './modules/chlomito'
 include { POLYPOLISH                            } from './modules/polypolish'
 include { POLYPOLISH as POLYPOLISH_LR           } from './modules/polypolish'
 include { MEDAKA                      } from './modules/medaka'
@@ -270,7 +271,12 @@ workflow {
 
         ch_lr_final = Channel.empty()
         if (has_sr) {
-            POLYPOLISH_LR(FLYE.out.assembly.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
+            // Short reads are available here, so chlomito's organelle-
+            // contamination removal (which requires paired short reads for
+            // its depth-ratio metric — it has no long-read input option)
+            // can run in this branch too, unlike long-read-only Mode 2.
+            CHLOMITO_LR(FLYE.out.assembly.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
+            POLYPOLISH_LR(CHLOMITO_LR.out.decontaminated.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
             ch_lr_final = POLYPOLISH_LR.out.fasta
         } else if (params.lr_type == 'ont') {
             MEDAKA(FLYE.out.assembly.join(ch_lr_reads))

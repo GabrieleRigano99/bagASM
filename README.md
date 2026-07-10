@@ -90,7 +90,9 @@ nextflow run GabrieleRigano99/bagASM \
 
 Give it both, and the short reads take over polishing duty from
 medaka/racon — Polypolish tends to do a more thorough job when it has the
-option.
+option. Having short reads around also means chlomito can run here too,
+stripping organelle contamination the same way it does in short-read-only
+mode (it has no long-read input option, so it sits out Mode 2 entirely).
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
