@@ -4,17 +4,26 @@
 //
 //  Short reads only:
 //    fastp -> SPAdes -> GetOrganelle (mitogenome, assembly-graph w/ read-based
-//    fallback) -> Redundans -> chlomito -> Polypolish -> rename/sort
+//    fallback) -> Redundans -> decontaminate -> Polypolish -> rename/sort
 //
 //  Long reads (--lr/--lr_type) present:
 //    Flye -> GetOrganelle (mitogenome, from Flye's .gfa) -> decontaminate -> polish -> rename/sort
 //    polishing: Polypolish if short reads are also given, else medaka (ont),
 //    racon (pacbio-clr), or none (pacbio-hifi is already highly accurate)
 //    Redundans is never run in this branch: Flye assemblies are already
-//    long-read-scaffolded. Organelle decontamination still happens: real
-//    chlomito if short reads are also given (it needs them for its
-//    depth-ratio metric), otherwise a native ALCR+SDR reimplementation for
-//    long reads alone (DECONTAM_ORGANELLE_LR, see bin/decontam_organelle_lr.py).
+//    long-read-scaffolded.
+//
+//  Organelle decontamination (all modes): a native ALCR+SDR reimplementation
+//  of chlomito's own detection approach, run against this pipeline's own
+//  already-extracted GetOrganelle mitogenome (see DECONTAM_ORGANELLE,
+//  bin/decontam_organelle.py). Real chlomito was tried first and abandoned:
+//  eight distinct, unrelated bugs turned up across four of its bundled
+//  scripts once actually exercised against real data (unquoted shell
+//  interpolation breaking on ordinary FASTA header characters, a
+//  species-string mismatch against its own CLI choices, missing glue code,
+//  a frozen 2017 samtools crashing under its own hardcoded thread count,
+//  and more) -- see docker/chlomito_fix/Dockerfile and this commit's history
+//  on modules/chlomito.nf (now removed) for the full trail.
 //
 //  Nextflow DSL2
 // ============================================================================
@@ -35,9 +44,9 @@ include { GET_ORGANELLE_FROM_READS    } from './modules/get_organelle_from_reads
 include { FINALIZE_MITOGENOME                          } from './modules/finalize_mitogenome'
 include { FINALIZE_MITOGENOME as FINALIZE_MITOGENOME_LR } from './modules/finalize_mitogenome'
 include { REDUNDANS                   } from './modules/redundans'
-include { CHLOMITO                    } from './modules/chlomito'
-include { CHLOMITO as CHLOMITO_LR     } from './modules/chlomito'
-include { DECONTAM_ORGANELLE_LR       } from './modules/decontam_organelle_lr'
+include { DECONTAM_ORGANELLE                       } from './modules/decontam_organelle'
+include { DECONTAM_ORGANELLE as DECONTAM_ORGANELLE_SR     } from './modules/decontam_organelle'
+include { DECONTAM_ORGANELLE as DECONTAM_ORGANELLE_HYBRID } from './modules/decontam_organelle'
 include { POLYPOLISH                            } from './modules/polypolish'
 include { POLYPOLISH as POLYPOLISH_LR           } from './modules/polypolish'
 include { MEDAKA                      } from './modules/medaka'
@@ -88,7 +97,7 @@ ${LN}
   ${CY}${B}MODE 1${R}  —  short reads only
 ${LN}
 
-  ${DM}fastp -> SPAdes -> GetOrganelle -> Redundans -> chlomito -> Polypolish -> rename/sort${R}
+  ${DM}fastp -> SPAdes -> GetOrganelle -> Redundans -> decontaminate -> Polypolish -> rename/sort${R}
 
     nextflow run main.nf --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
 
@@ -144,11 +153,6 @@ ${LN}
                           ${MG}${GETORGANELLE_TYPES.join(' | ')}${R}
                         or several joined by comma, e.g. embplant_pt,embplant_mt
     ${B}--threads${R}            Threads for process_high steps [${params.threads}]
-    ${B}--chlomito_species${R}    chlomito's own -species flag [${params.chlomito_species}]: ${MG}animal | plant | fungi${R}
-                        ${DM}(whenever short reads are given — independent of --species above,${R}
-                        ${DM}which only feeds GetOrganelle)${R}
-    ${B}--chlomito_mito_alcr_cutoff${R}  chlomito mitochondrial ALCR cutoff [${params.chlomito_mito_alcr_cutoff}]  ${DM}(whenever short reads are given)${R}
-    ${B}--chlomito_mito_sdr_cutoff${R}   chlomito mitochondrial SDR cutoff [${params.chlomito_mito_sdr_cutoff}]  ${DM}(whenever short reads are given)${R}
     ${B}--ont_mode${R}            Flye ONT preset [${params.ont_mode}]: ${MG}hq${R} (--nano-hq, modern/Dorado-Guppy-sup)
                         | ${MG}raw${R} (--nano-raw, R9/low-quality basecalls)  ${DM}(--lr_type ont only)${R}
     ${B}--filtlong_min_length${R}    Discard reads shorter than this [${params.filtlong_min_length}]
@@ -160,12 +164,9 @@ ${LN}
                         assembly — Flye --asm-coverage; requires --flye_genome_size
                         ${DM}(long-read mode only)${R}
     ${B}--medaka_model${R}        Override medaka's auto-detected model  ${DM}(--lr_type ont only)${R}
-    ${B}--skip_lr_decontam${R}    Skip organelle decontamination when long reads are the only input
-                        [${params.skip_lr_decontam}]  ${DM}(no effect if short reads are also given —${R}
-                        ${DM}real chlomito always runs there instead)${R}
-    ${B}--lr_decontam_alcr_cutoff${R}  ALCR cutoff for --skip_lr_decontam's native long-read
-                        reimplementation [${params.lr_decontam_alcr_cutoff}]  ${DM}(long-read-only mode)${R}
-    ${B}--lr_decontam_sdr_cutoff${R}   SDR cutoff, same context [${params.lr_decontam_sdr_cutoff}]
+    ${B}--skip_decontam${R}       Skip organelle decontamination entirely [${params.skip_decontam}]  ${DM}(all modes)${R}
+    ${B}--decontam_alcr_cutoff${R}  ALCR cutoff for organelle decontamination [${params.decontam_alcr_cutoff}]  ${DM}(all modes)${R}
+    ${B}--decontam_sdr_cutoff${R}   SDR cutoff, same context [${params.decontam_sdr_cutoff}]  ${DM}(all modes)${R}
     ${B}--polish_rounds${R}       Number of minibwa+Polypolish iterations [${params.polish_rounds}]
     ${B}--runmerqury${R}          Run Redundans' built-in Merqury k-mer QV/completeness [${params.runmerqury}]  ${DM}(MODE 1 only)${R}
     ${B}--busco_lineage${R}       BUSCO lineage for compleasm, e.g. ${MG}fungi_odb12${R} — if unset, compleasm is skipped
@@ -226,10 +227,6 @@ if (bad_species) {
     log.error "--species has invalid value(s) ${bad_species}. Must be one of: ${GETORGANELLE_TYPES.join(', ')} (or several joined by comma)"
     exit 1
 }
-if (!(params.chlomito_species in ['animal', 'plant', 'fungi'])) {
-    log.error "--chlomito_species must be one of: animal, plant, fungi"
-    exit 1
-}
 
 // Comma-separated lists pool multiple lanes/runs of the same library.
 def splitFiles = { p -> p.toString().split(',').collect { file(it.trim()) } }
@@ -287,26 +284,34 @@ workflow {
 
         ch_lr_final = Channel.empty()
         if (has_sr) {
-            // Short reads are available here, so chlomito's organelle-
-            // contamination removal (which requires paired short reads for
-            // its depth-ratio metric — it has no long-read input option)
-            // can run in this branch too, unlike long-read-only Mode 2.
-            CHLOMITO_LR(FLYE.out.assembly.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
-            POLYPOLISH_LR(CHLOMITO_LR.out.decontaminated.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
+            // Short reads are available here, so decontamination runs
+            // against them (higher-confidence alignment than long reads),
+            // matching the same native ALCR+SDR approach used everywhere
+            // else in this pipeline — see DECONTAM_ORGANELLE above.
+            ch_polish_input = FLYE.out.assembly
+            if (!params.skip_decontam) {
+                DECONTAM_ORGANELLE_HYBRID(
+                    FLYE.out.assembly
+                        .join(FINALIZE_MITOGENOME_LR.out)
+                        .join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, [r1, r2]) })
+                        .map { strain, assembly, mito_ref, reads -> tuple(strain, assembly, mito_ref, reads, 'sr') }
+                )
+                ch_polish_input = DECONTAM_ORGANELLE_HYBRID.out.decontaminated
+            }
+            POLYPOLISH_LR(ch_polish_input.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
             ch_lr_final = POLYPOLISH_LR.out.fasta
         } else {
-            // No short reads, so chlomito can't run here at all. Fall back
-            // to a native ALCR+SDR reimplementation for long reads alone
-            // (see bin/decontam_organelle_lr.py), unless skipped.
+            // No short reads, so decontamination runs against the long
+            // reads themselves instead, unless skipped.
             ch_assembly_for_polish = Channel.empty()
-            if (!params.skip_lr_decontam) {
-                DECONTAM_ORGANELLE_LR(
+            if (!params.skip_decontam) {
+                DECONTAM_ORGANELLE(
                     FLYE.out.assembly
                         .join(FINALIZE_MITOGENOME_LR.out)
                         .join(ch_lr_reads)
                         .join(ch_lr.map { strain, lr, type -> tuple(strain, type) })
                 )
-                ch_assembly_for_polish = DECONTAM_ORGANELLE_LR.out.decontaminated
+                ch_assembly_for_polish = DECONTAM_ORGANELLE.out.decontaminated
             } else {
                 ch_assembly_for_polish = FLYE.out.assembly
             }
@@ -363,9 +368,19 @@ workflow {
 
         // Nuclear assembly refinement: scaffold/gapfill, decontaminate, polish
         REDUNDANS(SPADES.out.scaffolds.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
-        CHLOMITO(REDUNDANS.out.scaffolds.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
 
-        ch_for_polish = CHLOMITO.out.decontaminated
+        ch_polish_input_sr = REDUNDANS.out.scaffolds
+        if (!params.skip_decontam) {
+            DECONTAM_ORGANELLE_SR(
+                REDUNDANS.out.scaffolds
+                    .join(FINALIZE_MITOGENOME.out)
+                    .join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, [r1, r2]) })
+                    .map { strain, assembly, mito_ref, reads -> tuple(strain, assembly, mito_ref, reads, 'sr') }
+            )
+            ch_polish_input_sr = DECONTAM_ORGANELLE_SR.out.decontaminated
+        }
+
+        ch_for_polish = ch_polish_input_sr
             .join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) })
         POLYPOLISH(ch_for_polish)
 

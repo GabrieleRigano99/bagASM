@@ -52,8 +52,8 @@ given it and picks the right path itself.
 ### 1. Short reads only
 
 The classic route: trim with fastp, assemble with SPAdes, scaffold and
-gap-fill with Redundans, strip out organelle contamination with chlomito,
-then polish with Polypolish.
+gap-fill with Redundans, strip out organelle contamination with a native
+ALCR+SDR detector (see below), then polish with Polypolish.
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
@@ -64,11 +64,11 @@ nextflow run GabrieleRigano99/bagASM \
 ### 2. Long reads only
 
 Point it at PacBio or ONT reads instead and it assembles with Flye, strips
-out organelle contamination with a native reimplementation of chlomito's
-own detection logic (chlomito itself needs paired short reads, which
-aren't available here), then polishes with whatever suits the platform —
-medaka for ONT, racon for PacBio-CLR, or nothing at all for PacBio-HiFi,
-which is already accurate enough on its own.
+out organelle contamination the same way (aligning the long reads
+themselves this time, since no short reads are available), then polishes
+with whatever suits the platform — medaka for ONT, racon for PacBio-CLR,
+or nothing at all for PacBio-HiFi, which is already accurate enough on its
+own.
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
@@ -82,10 +82,9 @@ nextflow run GabrieleRigano99/bagASM \
 
 Give it both, and the short reads take over polishing duty from
 medaka/racon — Polypolish tends to do a more thorough job when it has the
-option. Having short reads around also means real chlomito can run here
-too, taking over organelle-decontamination duty from Mode 2's native
-reimplementation (chlomito has no long-read input option, so it only
-appears once short reads are in the picture).
+option. Organelle decontamination also switches to aligning the short
+reads instead of the long ones, for a higher-confidence read of depth and
+coverage.
 
 ```bash
 nextflow run GabrieleRigano99/bagASM \
@@ -120,14 +119,14 @@ swap in your own sample name and output folder.
   MODE 1  —  short reads only
 ────────────────────────────────────────────────────────────────────────
 
-  fastp -> SPAdes -> GetOrganelle -> Redundans -> chlomito -> Polypolish -> rename/sort
+  fastp -> SPAdes -> GetOrganelle -> Redundans -> decontaminate -> Polypolish -> rename/sort
 
     nextflow run main.nf --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
 
   REQUIRED
     --r1 / --r2          Illumina paired reads (fastq/fastq.gz)
-    --strain              Strain/sample ID used for output naming
-    --outdir              Output directory
+    --strain             Strain/sample ID used for output naming
+    --outdir             Output directory
 
 ────────────────────────────────────────────────────────────────────────
   MODE 2  —  long reads only  (PacBio/ONT; switches assembler to Flye)
@@ -142,8 +141,8 @@ swap in your own sample name and output folder.
     nextflow run main.nf --lr reads.fq.gz --lr_type ont --strain StrainID --outdir results
 
   REQUIRED
-    --lr                  Long-read FASTQ(.gz)
-    --lr_type             ont | pacbio-clr | pacbio-hifi
+    --lr                 Long-read FASTQ(.gz)
+    --lr_type            ont | pacbio-clr | pacbio-hifi
     --strain / --outdir   as in MODE 1
 
 ────────────────────────────────────────────────────────────────────────
@@ -156,38 +155,40 @@ swap in your own sample name and output folder.
     nextflow run main.nf --lr reads.fq.gz --lr_type ont \
         --r1 R1.fq.gz --r2 R2.fq.gz --strain StrainID --outdir results
 
+────────────────────────────────────────────────────────────────────────
+  MULTIPLE LANES/RUNS OF THE SAME LIBRARY
+────────────────────────────────────────────────────────────────────────
+
+  Pass a comma-separated list to --r1/--r2/--lr to pool several lanes or
+  runs of one library, e.g.:
+    --r1 L001_R1.fq.gz,L002_R1.fq.gz --r2 L001_R2.fq.gz,L002_R2.fq.gz
+  --r1 and --r2 must list the same number of files, in matching lane order.
+  This is for multiple lanes/runs of the SAME library, not distinct library
+  preps (different insert sizes, mixed PE/MP) — those aren't supported.
 
 ────────────────────────────────────────────────────────────────────────
   OPTIONAL
 ────────────────────────────────────────────────────────────────────────
 
-    --species             Organelle type to extract [fungus_mt], passed to
-                          GetOrganelle's -F/-a. One of:
-                            embplant_pt | embplant_mt | embplant_nr | fungus_mt | fungus_nr | animal_mt | other_pt
-                          or several joined by comma, e.g. embplant_pt,embplant_mt
-    --threads             Threads for process_high steps [20]
-    --chlomito_species    chlomito's own -species flag [fungi]: animal | plant | fungi
-                          (whenever short reads are given — independent of --species above,
-                          which only feeds GetOrganelle)
-    --chlomito_mito_alcr_cutoff  chlomito mitochondrial ALCR cutoff [0.1]  (whenever short reads are given)
-    --chlomito_mito_sdr_cutoff   chlomito mitochondrial SDR cutoff [0.1]  (whenever short reads are given)
+    --species            Organelle type to extract [fungus_mt], passed to
+                        GetOrganelle's -F/-a. One of:
+                          embplant_pt | embplant_mt | embplant_nr | fungus_mt | fungus_nr | animal_mt | other_pt
+                        or several joined by comma, e.g. embplant_pt,embplant_mt
+    --threads            Threads for process_high steps [20]
     --ont_mode            Flye ONT preset [hq]: hq (--nano-hq, modern/Dorado-Guppy-sup)
-                          | raw (--nano-raw, R9/low-quality basecalls)  (--lr_type ont only)
+                        | raw (--nano-raw, R9/low-quality basecalls)  (--lr_type ont only)
     --filtlong_min_length    Discard reads shorter than this [1000]
-                          (--lr_type ont/pacbio-clr only)
+                        (--lr_type ont/pacbio-clr only)
     --filtlong_keep_percent  Keep only this % of reads by score [90]
-                          (--lr_type ont/pacbio-clr only)
+                        (--lr_type ont/pacbio-clr only)
     --flye_genome_size    Expected genome size, e.g. 35m — Flye -g/--genome-size  (long-read mode only)
     --flye_asm_coverage   Downsample to this per-base coverage for the initial disjointig
-                          assembly — Flye --asm-coverage; requires --flye_genome_size
-                          (long-read mode only)
+                        assembly — Flye --asm-coverage; requires --flye_genome_size
+                        (long-read mode only)
     --medaka_model        Override medaka's auto-detected model  (--lr_type ont only)
-    --skip_lr_decontam    Skip organelle decontamination when long reads are the only input
-                          [false]  (no effect if short reads are also given —
-                          real chlomito always runs there instead)
-    --lr_decontam_alcr_cutoff  ALCR cutoff for --skip_lr_decontam's native long-read
-                          reimplementation [0.1]  (long-read-only mode)
-    --lr_decontam_sdr_cutoff   SDR cutoff, same context [0.1]
+    --skip_decontam       Skip organelle decontamination entirely [false]  (all modes)
+    --decontam_alcr_cutoff  ALCR cutoff for organelle decontamination [0.1]  (all modes)
+    --decontam_sdr_cutoff   SDR cutoff, same context [0.1]  (all modes)
     --polish_rounds       Number of minibwa+Polypolish iterations [3]
     --runmerqury          Run Redundans' built-in Merqury k-mer QV/completeness [false]  (MODE 1 only)
     --busco_lineage       BUSCO lineage for compleasm, e.g. fungi_odb12 — if unset, compleasm is skipped
@@ -201,7 +202,11 @@ swap in your own sample name and output folder.
   stats, from the assembly's own reads realigned back to it) always run.
   compleasm (BUSCO-style gene completeness) runs only if --busco_lineage is set.
 
-
+────────────────────────────────────────────────────────────────────────
+  NOTE: Nextflow reserves single-dash options for its own launcher flags, so
+  inputs are passed as --r1/--r2/--lr (double-dash) rather than the -1/-2
+  convention used by tools like bwa/samtools.
+────────────────────────────────────────────────────────────────────────
 ```
 
 ## Quality control

@@ -24,11 +24,8 @@ not the `-1`/`-2` convention tools like `bwa` or `samtools` use.
 ## Requirements
 
 - Nextflow `>=25.04.6,<26`, Java 21
-- Docker, with the local (non-remote) executor. Several steps depend on
-  Docker-specific behavior — chlomito shells out to sibling containers via
-  a mounted Docker socket, so remote/cloud executors and Singularity aren't
-  supported. See the repo's `PIPELINE_SCHEME.txt` for the full list of
-  Docker-specific caveats.
+- Docker, with the local (non-remote) executor. See the repo's
+  `PIPELINE_SCHEME.txt` for the full list of Docker-specific caveats.
 
 ## Getting the pipeline
 
@@ -82,18 +79,19 @@ nextflow run GabrieleRigano99/bagASM \
 Steps: `fastp` (adapter/quality trimming) → `SPAdes` 4.3.0 (assembly) →
 `GetOrganelle` (mitogenome extraction, from the assembly graph, falling
 back to slower read-based extraction if the graph doesn't resolve a single
-scaffold) → `Redundans` (scaffolding + gap-filling) → `chlomito`
-(organelle-contamination removal) → `Polypolish` (polishing, via minibwa)
-→ rename and sort by length.
+scaffold) → `Redundans` (scaffolding + gap-filling) → native organelle
+decontamination (ALCR+SDR against the extracted mitogenome, see
+[Organelle decontamination](#organelle-decontamination)) → `Polypolish`
+(polishing, via minibwa) → rename and sort by length.
 
 Parameters specific to this mode:
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--species` | `fungus_mt` | Organelle type GetOrganelle extracts — see [Organelle extraction](#organelle-extraction) |
-| `--chlomito_species` | `fungi` | chlomito's own `-species` flag (`animal`/`plant`/`fungi`) — unrelated to `--species` above, which only feeds GetOrganelle |
-| `--chlomito_mito_alcr_cutoff` | `0.1` | chlomito mitochondrial ALCR cutoff |
-| `--chlomito_mito_sdr_cutoff` | `0.1` | chlomito mitochondrial SDR cutoff |
+| `--skip_decontam` | `false` | Skip organelle decontamination entirely — see [Organelle decontamination](#organelle-decontamination) |
+| `--decontam_alcr_cutoff` | `0.1` | Alignment-length-coverage-ratio cutoff |
+| `--decontam_sdr_cutoff` | `0.1` | Sequencing-depth-ratio cutoff |
 | `--polish_rounds` | `3` | Number of minibwa + Polypolish iterations |
 | `--runmerqury` | `false` | Also run Redundans' bundled Merqury k-mer QV/completeness check |
 
@@ -115,18 +113,13 @@ which assembler preset and which polisher run:
 | `pacbio-hifi` | no | `--pacbio-hifi` | none — HiFi is already ~99.9% accurate |
 
 Redundans is **not** run in this mode: Flye assemblies are already
-long-read-scaffolded. chlomito itself doesn't run here either — it has no
-long-read input mode at all, since it requires paired short reads to
-compute its sequencing-depth-ratio contamination metric — but organelle
-decontamination still happens: `DECONTAM_ORGANELLE_LR` reimplements
-chlomito's own two-metric approach (ALCR + SDR) natively from long reads
-alone, using minimap2/samtools instead of chlomito's short-read alignment.
-It runs right after mitogenome extraction, before polishing, for all three
+long-read-scaffolded. Organelle decontamination still happens: the same
+native ALCR+SDR algorithm used in every mode (see
+[Organelle decontamination](#organelle-decontamination)), aligning the
+long reads themselves against the extracted mitogenome with minimap2. It
+runs right after mitogenome extraction, before polishing, for all three
 `--lr_type` values (including `pacbio-hifi`, ahead of the "no polishing"
-step). Skip it with `--skip_lr_decontam` if you'd rather not risk this
-newer, less battle-tested logic — it's currently validated only against
-synthetic data, not yet a real dataset with genuine organelle
-contamination.
+step).
 
 Parameters specific to this mode:
 
@@ -139,9 +132,9 @@ Parameters specific to this mode:
 | `--flye_asm_coverage` | unset | Downsample to this per-base coverage for the initial assembly — Flye `--asm-coverage`; requires `--flye_genome_size` |
 | `--medaka_model` | unset (auto-detect) | Override medaka's basecall-based model choice (`ont` only) |
 | `--species` | `fungus_mt` | Same as Mode 1 — GetOrganelle still runs, from Flye's assembly graph |
-| `--skip_lr_decontam` | `false` | Skip `DECONTAM_ORGANELLE_LR` entirely (no effect once short reads are also given — real chlomito takes over instead, see Mode 3) |
-| `--lr_decontam_alcr_cutoff` | `0.1` | `DECONTAM_ORGANELLE_LR`'s alignment-length-coverage-ratio cutoff |
-| `--lr_decontam_sdr_cutoff` | `0.1` | `DECONTAM_ORGANELLE_LR`'s sequencing-depth-ratio cutoff |
+| `--skip_decontam` | `false` | Skip organelle decontamination entirely (all modes) |
+| `--decontam_alcr_cutoff` | `0.1` | Alignment-length-coverage-ratio cutoff (all modes) |
+| `--decontam_sdr_cutoff` | `0.1` | Sequencing-depth-ratio cutoff (all modes) |
 
 :::{warning}
 `--flye_asm_coverage` without `--flye_genome_size` is rejected immediately
@@ -167,15 +160,11 @@ still runs for ont/pacbio-clr, the assembler preset is still chosen by
   using the same `--polish_rounds` parameter as Mode 1. This override
   happens regardless of `--lr_type` — even for `pacbio-hifi`, which
   otherwise skips polishing entirely in Mode 2.
-- **chlomito also runs**, right before Polypolish — and supersedes
-  `DECONTAM_ORGANELLE_LR` entirely (`--skip_lr_decontam`,
-  `--lr_decontam_alcr_cutoff`, `--lr_decontam_sdr_cutoff` all have no
-  effect here). chlomito has no long-read input mode at all — it requires
-  paired short reads to compute its sequencing-depth-ratio contamination
-  metric — so it's skipped whenever long reads are the only input (Mode
-  2), but runs here since short reads are available. Same
-  `--chlomito_species` / `--chlomito_mito_alcr_cutoff` /
-  `--chlomito_mito_sdr_cutoff` parameters as Mode 1 apply.
+- decontamination aligns the **short reads** instead of the long ones
+  (higher-confidence alignment), using the same
+  `--decontam_alcr_cutoff`/`--decontam_sdr_cutoff`/`--skip_decontam`
+  parameters as every other mode — same algorithm throughout, just a
+  different read type feeding the alignment step.
 
 ---
 
@@ -194,6 +183,38 @@ accepts any of GetOrganelle's own vocabulary:
 The output folder and filename (`mitochondrion/<strain>_mitogenome.fasta`)
 stay fixed regardless of `--species` — naming doesn't adapt if you extract
 a plastid or nuclear-ribosomal sequence instead of a mitochondrion.
+:::
+
+## Organelle decontamination
+
+Every mode removes organelle-contaminated contigs from the nuclear
+assembly using the same native algorithm: two metrics computed with
+minimap2/samtools against the mitogenome already extracted in the previous
+step, no separate re-extraction or external tool involved.
+
+- **ALCR** (alignment length coverage ratio) — the fraction of a contig's
+  length that aligns to the extracted mitogenome. A contig containing only
+  a short organelle-derived fragment (e.g. from horizontal gene transfer)
+  has low ALCR and is protected from being flagged.
+- **SDR** (sequencing depth ratio) — a contig's own mean read depth
+  divided by the mitogenome reference's mean depth. Organelles exist at
+  much higher copy number per cell than the nuclear genome, so a true
+  organelle-derived contig sits close to the reference's depth; an
+  ordinary nuclear contig doesn't.
+
+A contig is dropped only when **both** clear their cutoff
+(`--decontam_alcr_cutoff`, `--decontam_sdr_cutoff`; default 0.1 each).
+Alignment uses whichever reads are actually available: long reads in
+Mode 2, short reads in Mode 1 and Mode 3 (short reads are preferred over
+long reads whenever both are given, since they align with higher
+confidence). Disable entirely with `--skip_decontam`.
+
+:::{note}
+This replaced a prior approach based on the third-party tool
+[chlomito](https://github.com/songwei-hxb/chlomito), removed after
+eight distinct, unrelated bugs turned up across four of its bundled
+scripts when actually run against real data — see `PIPELINE_SCHEME.txt`
+in the repository for the full trail if you're curious.
 :::
 
 ## Quality control
@@ -242,9 +263,7 @@ Three execution profiles are available via `-profile`:
 │   ├── spades/                              (short-read mode only)
 │   ├── flye/                                (long-read modes only)
 │   ├── redundans/                           (short-read mode only)
-│   ├── chlomito/                            (whenever short reads are given: short-read
-│   │                                         or long+short hybrid mode)
-│   ├── decontam_lr/                         (long-read-only mode, unless --skip_lr_decontam)
+│   ├── decontam/                            (every mode, unless --skip_decontam)
 │   ├── polished/
 │   └── <strain>_genome.fasta                (final assembly)
 ├── mitochondrion/
@@ -263,8 +282,8 @@ Three execution profiles are available via `-profile`:
 ```
 
 For the full breakdown of every process in every mode — including the
-GFA/fastg format handling, the chlomito docker-socket requirement, and the
-complete list of real bugs found and fixed along the way — see
+GFA/fastg format handling and the complete list of real bugs found and
+fixed along the way — see
 [`PIPELINE_SCHEME.txt`](https://github.com/GabrieleRigano99/bagASM/blob/main/PIPELINE_SCHEME.txt)
 in the repository.
 
