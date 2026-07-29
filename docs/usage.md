@@ -93,6 +93,7 @@ Parameters specific to this mode:
 | `--decontam_alcr_cutoff` | `0.1` | Alignment-length-coverage-ratio cutoff |
 | `--decontam_sdr_cutoff` | `0.1` | Sequencing-depth-ratio cutoff |
 | `--polish_rounds` | `3` | Number of minibwa + Polypolish iterations |
+| `--quast_per_round` | `false` | Also run QUAST on the pre-polish assembly and after every Polypolish round, as one comparative report — see [Quality control](#quality-control) |
 | `--runmerqury` | `false` | Also run Redundans' bundled Merqury k-mer QV/completeness check |
 
 ## Mode 2 — long reads only
@@ -157,9 +158,10 @@ still runs for ont/pacbio-clr, the assembler preset is still chosen by
 `--lr_type`), but whenever short reads are also given:
 
 - they take over polishing from medaka/racon: Polypolish runs instead,
-  using the same `--polish_rounds` parameter as Mode 1. This override
-  happens regardless of `--lr_type` — even for `pacbio-hifi`, which
-  otherwise skips polishing entirely in Mode 2.
+  using the same `--polish_rounds` (and, if set, `--quast_per_round`)
+  parameters as Mode 1. This override happens regardless of `--lr_type` —
+  even for `pacbio-hifi`, which otherwise skips polishing entirely in
+  Mode 2.
 - decontamination aligns the **short reads** instead of the long ones
   (higher-confidence alignment), using the same
   `--decontam_alcr_cutoff`/`--decontam_sdr_cutoff`/`--skip_decontam`
@@ -228,12 +230,24 @@ required:
   the final assembly (minibwa for the short-read branch, minimap2 with the
   platform-appropriate preset for the long-read branch)
 
+A single combined **Markdown report** per strain always follows,
+`qc/final_report/<strain>_final_report.md`, pulling the headline metrics
+out of QUAST's, Qualimap's, and (if it ran) compleasm's own report files
+into one place — no need to open all three separately.
+
 Two more are opt-in:
 
 | Flag | Default | Adds |
 |---|---|---|
-| `--busco_lineage` | unset | **compleasm** 0.2.8 (BUSCO-style gene completeness) against the named lineage, e.g. `fungi_odb12`. Skipped entirely if unset — there's no sensible default lineage. |
+| `--busco_lineage` | unset | **compleasm** 0.2.8 (BUSCO-style gene completeness) against the named lineage, e.g. `fungi_odb12`. Skipped entirely if unset — there's no sensible default lineage. Its metrics also appear in the combined final report when set. |
 | `--runmerqury` | `false` | Redundans' bundled **Merqury** k-mer QV/completeness check (short-read mode only) |
+
+A third, `--quast_per_round` (default `false`, short-read and hybrid modes
+only — wherever Polypolish actually runs), reruns QUAST on the pre-polish
+assembly and after every Polypolish round, as a single QUAST multi-assembly
+comparison (`qc/quast_rounds/<strain>_quast_rounds/report.tsv`, one column
+per round) rather than N separate QUAST runs — useful for seeing whether
+polishing is still improving contiguity/gene stats or has plateaued.
 
 ## Resources and execution
 
@@ -265,6 +279,10 @@ Three execution profiles are available via `-profile`:
 │   ├── redundans/                           (short-read mode only)
 │   ├── decontam/                            (every mode, unless --skip_decontam)
 │   ├── polished/
+│   │   ├── <strain>_polished.fasta
+│   │   └── <strain>_round<N>.fasta          (Polypolish modes only; round0 = pre-polish
+│   │                                          input, roundN = final round; always written,
+│   │                                          only used further if --quast_per_round)
 │   └── <strain>_genome.fasta                (final assembly)
 ├── mitochondrion/
 │   ├── get_organelle_from_assembly/
@@ -272,8 +290,10 @@ Three execution profiles are available via `-profile`:
 │   └── <strain>_mitogenome.fasta            (final mitogenome, every mode)
 ├── qc/
 │   ├── quast/<strain>_quast/
+│   ├── quast_rounds/<strain>_quast_rounds/  (only if --quast_per_round is set)
 │   ├── qualimap/<strain>_qualimap/
-│   └── compleasm/<strain>_compleasm/        (only if --busco_lineage is set)
+│   ├── compleasm/<strain>_compleasm/        (only if --busco_lineage is set)
+│   └── final_report/<strain>_final_report.md (always; combines all of the above)
 └── pipeline_info/
     ├── execution_report.html
     ├── execution_timeline.html

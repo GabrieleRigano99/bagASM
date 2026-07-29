@@ -240,6 +240,21 @@ QUALITY CONTROL — runs on assembly/<strain>_genome.fasta in every case
                                      v
                         qc/qualimap/<strain>_qualimap/
 
+  All three reports funnel into [FINAL_QC_REPORT] (bin/combine_qc_report.py),
+  which always runs and writes one combined Markdown summary per strain —
+  qc/final_report/<strain>_final_report.md — pulling the headline metrics out
+  of each tool's own report format (QUAST's report.tsv, Qualimap's
+  genome_results.txt, compleasm's summary.txt if it ran).
+
+  Separately, --quast_per_round (default off; short-read and hybrid branches
+  only, i.e. wherever POLYPOLISH/POLYPOLISH_LR actually runs) has Polypolish
+  emit every intermediate round<N>.fasta (round0 = the pre-polish input,
+  through roundN = the final round) and feeds them all into one
+  [QUAST_ROUNDS] invocation using QUAST's own native multi-assembly
+  comparison mode (-l round0,round1,...,roundN) — a single comparative
+  report.tsv (one column per round) showing contiguity change across
+  polishing, at qc/quast_rounds/<strain>_quast_rounds/.
+
   Separately, --runmerqury (short-read branch only, default off) enables
   Redundans' own bundled Merqury integration during the REDUNDANS step
   itself (k-mer-based QV/completeness, no reference needed) — see CASE 1
@@ -272,6 +287,9 @@ OUTPUT LAYOUT (<outdir>/...)
       <strain>_decontam_report.tsv (per-contig ALCR/SDR values and the flagged/kept verdict)
     polished/
       <strain>_polished.fasta                  (Polypolish, medaka, or racon output)
+      <strain>_round<N>.fasta                  (Polypolish branches only: round0 = pre-polish
+                                                 input through roundN = final; always emitted,
+                                                 only consumed further if --quast_per_round)
     <strain>_genome.fasta                      (final: renamed + sorted by length)
 
   mitochondrion/
@@ -281,8 +299,10 @@ OUTPUT LAYOUT (<outdir>/...)
 
   qc/                                          (see QUALITY CONTROL above)
     quast/<strain>_quast/
+    quast_rounds/<strain>_quast_rounds/          (only if --quast_per_round is set)
     qualimap/<strain>_qualimap/
     compleasm/<strain>_compleasm/               (only if --busco_lineage is set)
+    final_report/<strain>_final_report.md        (always; combines all of the above)
 
   pipeline_info/
     execution_report.html / execution_timeline.html / execution_trace.txt
@@ -496,3 +516,33 @@ CAVEATS / OPEN ITEMS
     gabrielerigano/bagasm-chlomito:1.0 image are left in place as a
     reference of what was tried, but nothing in the active pipeline
     launches that container anymore.
+
+17. --quast_per_round and the always-on combined final QC report: POLYPOLISH
+    now also emits every intermediate round<N>.fasta it produces internally
+    (it always ran a bash loop writing round0.fasta..roundN.fasta into its
+    own workdir, but only ever published/emitted the last one) — these are
+    harmless to always emit/publish (a few extra genome-sized FASTA copies
+    per strain) and only get consumed further when --quast_per_round is set,
+    which feeds them all into one QUAST_ROUNDS call using QUAST's own
+    native multi-assembly comparison mode (multiple FASTA args + one
+    -l label per assembly), rather than N separate QUAST invocations — this
+    only applies where Polypolish actually runs (CASE 1 short-read-only,
+    CASE 5 hybrid); medaka/racon (CASE 2/3, no short reads) have no
+    equivalent "rounds" concept, so QUAST_ROUNDS has no counterpart there.
+    Separately, FINAL_QC_REPORT (bin/combine_qc_report.py) always runs
+    regardless of any flag, joining QUAST + Qualimap bamqc + (if it ran)
+    compleasm's own report files by parsing each tool's real, on-disk report
+    format directly — QUAST's report.tsv (tab-separated, metric name in
+    column 1), Qualimap's genome_results.txt (">>>>>>> Section" headers,
+    "key = value" lines), compleasm's summary.txt ("## lineage:" header,
+    "S:/D:/F:/I:/M:/N:" BUSCO-style lines) — into one Markdown file per
+    strain. Compleasm's output is optional (skipped entirely if
+    --busco_lineage isn't set); the assets/NO_FILE sentinel pattern is used
+    to keep FINAL_QC_REPORT's process input arity fixed either way, the same
+    idiom this pipeline's sibling project (bagRNA) already relies on for
+    optional inputs. Both features' parsing logic (bin/combine_qc_report.py)
+    were validated directly against real QUAST/Qualimap/compleasm output
+    files from unrelated prior real runs (not synthetic/guessed formats)
+    before being wired into the pipeline; the wiring itself was validated
+    with -stub across all three modes, with and without --quast_per_round
+    and --busco_lineage.

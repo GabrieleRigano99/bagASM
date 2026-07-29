@@ -190,6 +190,9 @@ swap in your own sample name and output folder.
     --decontam_alcr_cutoff  ALCR cutoff for organelle decontamination [0.1]  (all modes)
     --decontam_sdr_cutoff   SDR cutoff, same context [0.1]  (all modes)
     --polish_rounds       Number of minibwa+Polypolish iterations [3]
+    --quast_per_round     Also run QUAST on the pre-polish assembly and after every
+                        Polypolish round, as one comparative report [false]
+                        (modes 1 and 3 only — the modes that run Polypolish)
     --runmerqury          Run Redundans' built-in Merqury k-mer QV/completeness [false]  (MODE 1 only)
     --busco_lineage       BUSCO lineage for compleasm, e.g. fungi_odb12 — if unset, compleasm is skipped
     --max_memory          Override memory cap for process_high/long steps
@@ -201,6 +204,9 @@ swap in your own sample name and output folder.
   QUAST (contiguity/gene-prediction stats) and Qualimap bamqc (read-mapping
   stats, from the assembly's own reads realigned back to it) always run.
   compleasm (BUSCO-style gene completeness) runs only if --busco_lineage is set.
+  A single combined Markdown report per strain (QUAST + Qualimap + compleasm)
+  is always written to qc/final_report/. --quast_per_round adds a separate
+  QUAST comparison report across polishing rounds (qc/quast_rounds/).
 
 ────────────────────────────────────────────────────────────────────────
   NOTE: Nextflow reserves single-dash options for its own launcher flags, so
@@ -212,6 +218,12 @@ swap in your own sample name and output folder.
 ## Quality control
 
 Every run finishes with QUAST and Qualimap bamqc checking over the final
-assembly, no flags needed. Add `--busco_lineage fungi_odb12` (or any BUSCO
-lineage name) to also run compleasm. `--runmerqury` (short-read mode only)
-turns on Redundans' own bundled Merqury k-mer QV/completeness check.
+assembly, no flags needed, and a single combined Markdown report per strain
+(`qc/final_report/`) pulling the headline numbers from both together. Add
+`--busco_lineage fungi_odb12` (or any BUSCO lineage name) to also run
+compleasm and fold its completeness stats into that same report.
+`--quast_per_round` (short-read/hybrid modes only) reruns QUAST on the
+pre-polish assembly and after every Polypolish round, as one comparative
+report showing contiguity change across polishing. `--runmerqury`
+(short-read mode only) turns on Redundans' own bundled Merqury k-mer
+QV/completeness check.

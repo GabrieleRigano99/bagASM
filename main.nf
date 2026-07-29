@@ -55,12 +55,16 @@ include { RENAME_SORT                          } from './modules/rename_sort'
 include { RENAME_SORT as RENAME_SORT_LR        } from './modules/rename_sort'
 include { QUAST                                } from './modules/quast'
 include { QUAST as QUAST_LR                    } from './modules/quast'
+include { QUAST_ROUNDS                         } from './modules/quast_rounds'
+include { QUAST_ROUNDS as QUAST_ROUNDS_LR      } from './modules/quast_rounds'
 include { COMPLEASM                            } from './modules/compleasm'
 include { COMPLEASM as COMPLEASM_LR            } from './modules/compleasm'
 include { ALIGN_SR_FOR_QC                      } from './modules/align_sr_for_qc'
 include { ALIGN_LR_FOR_QC                      } from './modules/align_lr_for_qc'
 include { QUALIMAP_BAMQC                       } from './modules/qualimap_bamqc'
 include { QUALIMAP_BAMQC as QUALIMAP_BAMQC_LR  } from './modules/qualimap_bamqc'
+include { FINAL_QC_REPORT                      } from './modules/final_qc_report'
+include { FINAL_QC_REPORT as FINAL_QC_REPORT_LR } from './modules/final_qc_report'
 
 // GetOrganelle's own -F/-a organelle-type vocabulary (get_organelle_from_assembly.py,
 // get_organelle_from_reads.py, get_organelle_config.py); "anonym" is deliberately
@@ -168,6 +172,9 @@ ${LN}
     ${B}--decontam_alcr_cutoff${R}  ALCR cutoff for organelle decontamination [${params.decontam_alcr_cutoff}]  ${DM}(all modes)${R}
     ${B}--decontam_sdr_cutoff${R}   SDR cutoff, same context [${params.decontam_sdr_cutoff}]  ${DM}(all modes)${R}
     ${B}--polish_rounds${R}       Number of minibwa+Polypolish iterations [${params.polish_rounds}]
+    ${B}--quast_per_round${R}     Also run QUAST on the pre-polish assembly and after every
+                        Polypolish round, as one comparative report [${params.quast_per_round}]
+                        ${DM}(modes 1 and 3 only — the modes that run Polypolish)${R}
     ${B}--runmerqury${R}          Run Redundans' built-in Merqury k-mer QV/completeness [${params.runmerqury}]  ${DM}(MODE 1 only)${R}
     ${B}--busco_lineage${R}       BUSCO lineage for compleasm, e.g. ${MG}fungi_odb12${R} — if unset, compleasm is skipped
     ${B}--max_memory${R}          Override memory cap for process_high/long steps
@@ -179,6 +186,9 @@ ${LN}
   ${DM}QUAST (contiguity/gene-prediction stats) and Qualimap bamqc (read-mapping${R}
   ${DM}stats, from the assembly's own reads realigned back to it) always run.${R}
   ${DM}compleasm (BUSCO-style gene completeness) runs only if --busco_lineage is set.${R}
+  ${DM}A single combined Markdown report per strain (QUAST + Qualimap + compleasm)${R}
+  ${DM}is always written to qc/final_report/. --quast_per_round adds a separate${R}
+  ${DM}QUAST comparison report across polishing rounds (qc/quast_rounds/).${R}
 
 ${LN}
   ${DM}NOTE: Nextflow reserves single-dash options for its own launcher flags, so${R}
@@ -300,6 +310,9 @@ workflow {
             }
             POLYPOLISH_LR(ch_polish_input.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
             ch_lr_final = POLYPOLISH_LR.out.fasta
+            if (params.quast_per_round) {
+                QUAST_ROUNDS_LR(POLYPOLISH_LR.out.rounds)
+            }
         } else {
             // No short reads, so decontamination runs against the long
             // reads themselves instead, unless skipped.
@@ -333,11 +346,20 @@ workflow {
 
         // ── QC: contiguity, gene completeness, read-mapping stats ──────────
         QUAST_LR(RENAME_SORT_LR.out.fasta)
+        ch_compleasm_report_lr = Channel.value(file("${projectDir}/assets/NO_FILE"))
         if (params.busco_lineage) {
             COMPLEASM_LR(RENAME_SORT_LR.out.fasta)
+            ch_compleasm_report_lr = COMPLEASM_LR.out.report
         }
         ALIGN_LR_FOR_QC(RENAME_SORT_LR.out.fasta.join(ch_lr_reads).join(ch_lr.map { strain, lr, type -> tuple(strain, type) }))
         QUALIMAP_BAMQC_LR(ALIGN_LR_FOR_QC.out.bam)
+
+        FINAL_QC_REPORT_LR(
+            Channel.value(params.strain)
+                .combine(QUAST_LR.out.report)
+                .combine(QUALIMAP_BAMQC_LR.out.report)
+                .combine(ch_compleasm_report_lr)
+        )
 
     } else {
         // ── Short-read-only assembly branch ────────────────────────────────
@@ -383,15 +405,27 @@ workflow {
         ch_for_polish = ch_polish_input_sr
             .join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) })
         POLYPOLISH(ch_for_polish)
+        if (params.quast_per_round) {
+            QUAST_ROUNDS(POLYPOLISH.out.rounds)
+        }
 
         RENAME_SORT(POLYPOLISH.out.fasta)
 
         // ── QC: contiguity, gene completeness, read-mapping stats ──────────
         QUAST(RENAME_SORT.out.fasta)
+        ch_compleasm_report_sr = Channel.value(file("${projectDir}/assets/NO_FILE"))
         if (params.busco_lineage) {
             COMPLEASM(RENAME_SORT.out.fasta)
+            ch_compleasm_report_sr = COMPLEASM.out.report
         }
         ALIGN_SR_FOR_QC(RENAME_SORT.out.fasta.join(ch_trimmed.map { strain, r1, r2 -> tuple(strain, r1, r2) }))
         QUALIMAP_BAMQC(ALIGN_SR_FOR_QC.out.bam)
+
+        FINAL_QC_REPORT(
+            Channel.value(params.strain)
+                .combine(QUAST.out.report)
+                .combine(QUALIMAP_BAMQC.out.report)
+                .combine(ch_compleasm_report_sr)
+        )
     }
 }
