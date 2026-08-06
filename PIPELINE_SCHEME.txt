@@ -67,9 +67,11 @@ CASE 1 — short reads only (--r1 + --r2, no --lr)
        |                                mitochondrion/<strain>_mitogenome.fasta
        |
        v
-  [REDUNDANS] 2.01   -i R1 R2  --limit 1   (reduction + scaffolding + gap-closing,
-       |                                    all on by default; --limit 1 = align
-       |                                    100% of reads instead of the 20% default)
+  [REDUNDANS] 2.01   -i R1 R2  --limit <redundans_limit>   (reduction + scaffolding +
+       |                                    gap-closing, all on by default;
+       |                                    --redundans_limit [default 1] = fraction
+       |                                    of reads aligned, vs. Redundans' own 0.2
+       |                                    default — see --help)
        v
   scaffolds.reduced.fa
        |
@@ -546,3 +548,13 @@ CAVEATS / OPEN ITEMS
     before being wired into the pipeline; the wiring itself was validated
     with -stub across all three modes, with and without --quast_per_round
     and --busco_lineage.
+
+18. --redundans_limit exposes Redundans' own --limit flag (short-read mode
+    only — the only branch Redundans runs in), which controls the fraction
+    of reads it aligns for scaffolding; confirmed via `redundans.py --help`
+    inside gabrielerigano/bagasm-redundans:1.0 that it takes a 0-1 fraction
+    (not a 0-100 percentage) and defaults upstream to 0.2. This pipeline had
+    it hardcoded to `--limit 1` (100% of reads) since the very first working
+    run; now exposed as --redundans_limit, still defaulting to 1 to preserve
+    existing behavior. Validated: `1.5` (out of range) is rejected up front
+    with a clear error, `0.3` runs cleanly through -stub.

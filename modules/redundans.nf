@@ -29,7 +29,7 @@ process REDUNDANS {
     redundans.py \\
         -f ${scaffolds} \\
         -i ${r1} ${r2} \\
-        --limit 1 \\
+        --limit ${params.redundans_limit} \\
         -t ${task.cpus} -m ${mem_gb} \\
         -o redundans_out \\
         ${merqury_opt}

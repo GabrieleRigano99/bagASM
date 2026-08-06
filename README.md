@@ -193,6 +193,7 @@ swap in your own sample name and output folder.
     --quast_per_round     Also run QUAST on the pre-polish assembly and after every
                         Polypolish round, as one comparative report [false]
                         (modes 1 and 3 only — the modes that run Polypolish)
+    --redundans_limit     Fraction (0-1] of reads Redundans aligns for scaffolding [1]  (MODE 1 only)
     --runmerqury          Run Redundans' built-in Merqury k-mer QV/completeness [false]  (MODE 1 only)
     --busco_lineage       BUSCO lineage for compleasm, e.g. fungi_odb12 — if unset, compleasm is skipped
     --max_memory          Override memory cap for process_high/long steps

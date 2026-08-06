@@ -175,6 +175,7 @@ ${LN}
     ${B}--quast_per_round${R}     Also run QUAST on the pre-polish assembly and after every
                         Polypolish round, as one comparative report [${params.quast_per_round}]
                         ${DM}(modes 1 and 3 only — the modes that run Polypolish)${R}
+    ${B}--redundans_limit${R}     Fraction (0-1] of reads Redundans aligns for scaffolding [${params.redundans_limit}]  ${DM}(MODE 1 only)${R}
     ${B}--runmerqury${R}          Run Redundans' built-in Merqury k-mer QV/completeness [${params.runmerqury}]  ${DM}(MODE 1 only)${R}
     ${B}--busco_lineage${R}       BUSCO lineage for compleasm, e.g. ${MG}fungi_odb12${R} — if unset, compleasm is skipped
     ${B}--max_memory${R}          Override memory cap for process_high/long steps
@@ -229,6 +230,10 @@ if (params.flye_asm_coverage && !params.flye_genome_size) {
 }
 if (!(params.polish_rounds instanceof Integer) || params.polish_rounds < 1) {
     log.error "--polish_rounds must be a positive integer"
+    exit 1
+}
+if (!(params.redundans_limit instanceof Number) || params.redundans_limit <= 0 || params.redundans_limit > 1) {
+    log.error "--redundans_limit must be a number greater than 0 and less than or equal to 1 (fraction of reads to align, e.g. 0.3 for 30%)"
     exit 1
 }
 def species_tokens = params.species.toString().split(',').collect { it.trim() }

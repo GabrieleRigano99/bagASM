@@ -92,6 +92,7 @@ Parameters specific to this mode:
 | `--skip_decontam` | `false` | Skip organelle decontamination entirely — see [Organelle decontamination](#organelle-decontamination) |
 | `--decontam_alcr_cutoff` | `0.1` | Alignment-length-coverage-ratio cutoff |
 | `--decontam_sdr_cutoff` | `0.1` | Sequencing-depth-ratio cutoff |
+| `--redundans_limit` | `1` | Fraction (0-1] of reads Redundans aligns for scaffolding — Redundans' own `--limit`, whose upstream default is `0.2` |
 | `--polish_rounds` | `3` | Number of minibwa + Polypolish iterations |
 | `--quast_per_round` | `false` | Also run QUAST on the pre-polish assembly and after every Polypolish round, as one comparative report — see [Quality control](#quality-control) |
 | `--runmerqury` | `false` | Also run Redundans' bundled Merqury k-mer QV/completeness check |
