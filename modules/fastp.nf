@@ -17,9 +17,24 @@ process FASTP {
     """
     # Multiple lanes of the same library are pooled by concatenating the
     # (optionally gzipped) FASTQs; concatenated multi-member gzip is valid
-    # and fastp reads it correctly.
-    cat ${r1.join(' ')} > ${strain}_R1.merged.fastq.gz
-    cat ${r2.join(' ')} > ${strain}_R2.merged.fastq.gz
+    # and fastp reads it correctly. fastp itself decides whether to
+    # gunzip on read purely from the .fastq.gz name, not the actual file
+    # content -- a plain-text lane file just `cat`-ed into a .gz-named
+    # merge crashes it ("invalid gzip header found"). gzip -t (BusyBox-
+    # compatible, confirmed inside this container; zcat -f is not) checks
+    # each lane file's real compression state so plain and gzipped lanes
+    # can even be mixed across --r1/--r2.
+    normalize_gzip() {
+        for f in "\$@"; do
+            if gzip -t "\$f" 2>/dev/null; then
+                cat "\$f"
+            else
+                gzip -c "\$f"
+            fi
+        done
+    }
+    normalize_gzip ${r1.join(' ')} > ${strain}_R1.merged.fastq.gz
+    normalize_gzip ${r2.join(' ')} > ${strain}_R2.merged.fastq.gz
 
     fastp \\
         -i ${strain}_R1.merged.fastq.gz -I ${strain}_R2.merged.fastq.gz \\

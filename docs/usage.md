@@ -66,6 +66,10 @@ This is for multiple lanes/runs of one library — not for genuinely
 distinct library preparations (different insert sizes, mixed
 paired-end/mate-pair), which aren't supported.
 
+Short-read FASTQs (`--r1`/`--r2`) can be gzipped or plain text, and lanes
+of either kind can even be mixed within the same run — each is checked
+and normalized before fastp sees it.
+
 ---
 
 ## Mode 1 — short reads only
