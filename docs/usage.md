@@ -93,6 +93,7 @@ Parameters specific to this mode:
 | Flag | Default | Meaning |
 |---|---|---|
 | `--species` | `fungus_mt` | Organelle type GetOrganelle extracts — see [Organelle extraction](#organelle-extraction) |
+| `--skip_trimming` | `false` | Skip fastp entirely — no adapter/quality/length trimming, no HTML/JSON QC report. Lane pooling and gzip normalization still happen either way. |
 | `--skip_decontam` | `false` | Skip organelle decontamination entirely — see [Organelle decontamination](#organelle-decontamination) |
 | `--decontam_alcr_cutoff` | `0.1` | Alignment-length-coverage-ratio cutoff |
 | `--decontam_sdr_cutoff` | `0.1` | Sequencing-depth-ratio cutoff |

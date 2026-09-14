@@ -174,6 +174,8 @@ swap in your own sample name and output folder.
                         GetOrganelle's -F/-a. One of:
                           embplant_pt | embplant_mt | embplant_nr | fungus_mt | fungus_nr | animal_mt | other_pt
                         or several joined by comma, e.g. embplant_pt,embplant_mt
+    --skip_trimming      Skip fastp entirely — no adapter/quality/length trimming,
+                        no HTML/JSON QC report [false]  (MODE 1 only)
     --threads            Threads for process_high steps [20]
     --ont_mode            Flye ONT preset [hq]: hq (--nano-hq, modern/Dorado-Guppy-sup)
                         | raw (--nano-raw, R9/low-quality basecalls)  (--lr_type ont only)

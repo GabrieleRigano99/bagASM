@@ -156,6 +156,8 @@ ${LN}
                         GetOrganelle's -F/-a. One of:
                           ${MG}${GETORGANELLE_TYPES.join(' | ')}${R}
                         or several joined by comma, e.g. embplant_pt,embplant_mt
+    ${B}--skip_trimming${R}      Skip fastp entirely — no adapter/quality/length trimming,
+                        no HTML/JSON QC report [${params.skip_trimming}]  ${DM}(MODE 1 only)${R}
     ${B}--threads${R}            Threads for process_high steps [${params.threads}]
     ${B}--ont_mode${R}            Flye ONT preset [${params.ont_mode}]: ${MG}hq${R} (--nano-hq, modern/Dorado-Guppy-sup)
                         | ${MG}raw${R} (--nano-raw, R9/low-quality basecalls)  ${DM}(--lr_type ont only)${R}

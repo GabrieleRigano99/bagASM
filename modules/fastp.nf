@@ -10,8 +10,8 @@ process FASTP {
 
     output:
     tuple val(strain), path("${strain}_R1.trimmed.fastq.gz"), path("${strain}_R2.trimmed.fastq.gz"), emit: reads
-    path "${strain}.fastp.html", emit: html
-    path "${strain}.fastp.json", emit: json
+    path "${strain}.fastp.html", emit: html, optional: true
+    path "${strain}.fastp.json", emit: json, optional: true
 
     script:
     """
@@ -23,7 +23,9 @@ process FASTP {
     # merge crashes it ("invalid gzip header found"). gzip -t (BusyBox-
     # compatible, confirmed inside this container; zcat -f is not) checks
     # each lane file's real compression state so plain and gzipped lanes
-    # can even be mixed across --r1/--r2.
+    # can even be mixed across --r1/--r2. This pooling/normalizing always
+    # happens, even with --skip_trimming, since every downstream step
+    # expects one real-gzip R1/R2 file per strain regardless.
     normalize_gzip() {
         for f in "\$@"; do
             if gzip -t "\$f" 2>/dev/null; then
@@ -36,15 +38,23 @@ process FASTP {
     normalize_gzip ${r1.join(' ')} > ${strain}_R1.merged.fastq.gz
     normalize_gzip ${r2.join(' ')} > ${strain}_R2.merged.fastq.gz
 
-    fastp \\
-        -i ${strain}_R1.merged.fastq.gz -I ${strain}_R2.merged.fastq.gz \\
-        -o ${strain}_R1.trimmed.fastq.gz -O ${strain}_R2.trimmed.fastq.gz \\
-        --detect_adapter_for_pe \\
-        --thread ${task.cpus} \\
-        --html ${strain}.fastp.html \\
-        --json ${strain}.fastp.json
+    if [ "${params.skip_trimming}" = "true" ]; then
+        # Skip fastp entirely -- no adapter/quality/length trimming, no
+        # HTML/JSON QC report, just the pooled/gzip-normalized reads
+        # untouched.
+        mv ${strain}_R1.merged.fastq.gz ${strain}_R1.trimmed.fastq.gz
+        mv ${strain}_R2.merged.fastq.gz ${strain}_R2.trimmed.fastq.gz
+    else
+        fastp \\
+            -i ${strain}_R1.merged.fastq.gz -I ${strain}_R2.merged.fastq.gz \\
+            -o ${strain}_R1.trimmed.fastq.gz -O ${strain}_R2.trimmed.fastq.gz \\
+            --detect_adapter_for_pe \\
+            --thread ${task.cpus} \\
+            --html ${strain}.fastp.html \\
+            --json ${strain}.fastp.json
 
-    rm ${strain}_R1.merged.fastq.gz ${strain}_R2.merged.fastq.gz
+        rm ${strain}_R1.merged.fastq.gz ${strain}_R2.merged.fastq.gz
+    fi
     """
 
     stub:
