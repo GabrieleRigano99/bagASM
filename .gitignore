@@ -27,3 +27,7 @@ testdata*/
 
 # Sphinx build output
 docs/_build/
+
+# Python / test outputs
+__pycache__/
+SG04_out/

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=bagASM
+Comment=Fungal genome assembly pipeline runner
+Exec=env NXF_VER=25.04.6 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 python3 /home/astrogab/bagASM/gui/bagasm_gui.py
+Icon=/home/astrogab/bagASM/gui/icon.png
+Terminal=false
+Categories=Science;
+StartupNotify=true

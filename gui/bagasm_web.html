@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bagASM Runner</title>
+<link rel="icon" href="/icon.png">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2330;--mut:#6b7385;--line:#dfe3ea;--acc:#1f8f5f;--warn:#c98a00;--bad:#c0392b;--info:#2a6fdb}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12151c;--card:#1b2029;--fg:#e6e9ef;--mut:#8b93a5;--line:#2c3340;--acc:#3fbf8a;--warn:#e0a82e;--bad:#ef6b5b;--info:#6aa3ff}}
+:root[data-theme=dark]{--bg:#12151c;--card:#1b2029;--fg:#e6e9ef;--mut:#8b93a5;--line:#2c3340;--acc:#3fbf8a;--warn:#e0a82e;--bad:#ef6b5b;--info:#6aa3ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{margin:0;font-size:22px;color:var(--acc)} header .sub{color:var(--mut)}
+.gauges{margin-left:auto;display:flex;gap:14px;align-items:center}
+.gauge{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
+.gauge i{display:block;width:70px;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.gauge b{display:block;height:100%;width:0;background:var(--info);transition:width .4s}
+main{display:grid;grid-template-columns:minmax(380px,500px) 1fr;gap:16px;padding:16px 20px;align-items:start}
+@media (max-width:1000px){main{grid-template-columns:1fr}}
+fieldset{background:var(--card);border:1px solid var(--line);border-radius:8px;margin:0 0 12px;padding:8px 14px 12px;min-width:0}
+legend{font-weight:600;padding:0 6px}
+label{display:grid;grid-template-columns:170px 1fr;gap:8px;align-items:center;margin:6px 0}
+label.chk{grid-template-columns:auto 1fr;justify-content:start}
+input[type=text],select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+button{padding:8px 18px;border:0;border-radius:6px;font:inherit;font-weight:600;color:#fff;background:var(--acc);cursor:pointer}
+button.stop{background:var(--bad)} button.alt{background:transparent;color:var(--info);border:1px solid var(--info)}
+button:disabled{opacity:.4;cursor:not-allowed}
+.bar{height:14px;background:var(--line);border-radius:7px;overflow:hidden;margin:6px 0}
+.bar>div{height:100%;width:0;background:var(--info);transition:width .4s}
+.row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+.pick{display:flex;gap:6px}.pick button{padding:5px 10px;font-weight:500}
+#errs{color:var(--bad);white-space:pre-line;margin-bottom:8px}
+#advbox{display:none}
+#status{font-size:16px}#meta{color:var(--mut)}
+
+/* flow diagram */
+.lane{display:flex;align-items:center;gap:6px;margin:8px 0;flex-wrap:wrap}
+.lane>span.ln{width:86px;color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.chip{border:1.5px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer;background:var(--bg);min-width:96px;position:relative}
+.chip b{display:block;font:600 12px ui-monospace,monospace}
+.chip small{color:var(--mut);font-size:11px}
+.chip.waiting{border-style:dashed;color:var(--mut)}
+.chip.done{border-color:var(--acc)}.chip.done b::before{content:"\2713 ";color:var(--acc)}
+.chip.cached{border-color:var(--mut)}.chip.cached b::before{content:"\21BA ";color:var(--mut)}
+.chip.running{border-color:var(--warn);animation:pulse 1.4s infinite}
+.chip.failed{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--bg))}.chip.failed b::before{content:"\2717 ";color:var(--bad)}
+.chip.sel{outline:2px solid var(--info)}
+.lane .chip:not(:last-child)::after{content:"\203A";position:absolute;right:-10px;top:50%;transform:translateY(-55%);color:var(--mut);font-size:16px}
+@keyframes pulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--warn) 30%,transparent)}}
+@media (prefers-reduced-motion:reduce){.chip.running{animation:none}}
+
+/* gantt */
+.g{display:grid;grid-template-columns:190px 1fr;gap:2px 8px;align-items:center;font-size:12px}
+.g .n{font:12px ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g .t{position:relative;height:14px;background:var(--bg);border-radius:3px}
+.g .t i{position:absolute;top:0;bottom:0;border-radius:3px;min-width:2px;background:var(--info)}
+.g .t i.done{background:var(--acc)}.g .t i.cached{background:var(--mut)}.g .t i.running{background:var(--warn)}.g .t i.failed{background:var(--bad)}
+.g .t em{position:absolute;right:4px;top:-1px;font-style:normal;color:var(--mut);font-size:11px}
+
+/* failures */
+#fail .card{border:1px solid var(--bad);border-radius:8px;padding:8px 12px;margin-bottom:8px}
+pre{margin:6px 0;white-space:pre-wrap;word-break:break-word;font:12px/1.4 ui-monospace,monospace;background:var(--bg);padding:8px;border-radius:6px;max-height:240px;overflow:auto}
+
+/* results */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+.tile{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.tile b{display:block;font-size:20px}.tile span{color:var(--mut);font-size:12px}
+.chart h4{margin:12px 0 4px}.chart svg{width:100%;height:auto;display:block}
+.chart text{fill:var(--fg);font:11px system-ui,sans-serif}.chart .m{fill:var(--mut)}
+.leg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-top:4px}.leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+
+/* log */
+#log{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px;height:320px;overflow:auto;white-space:pre;font:12px/1.4 ui-monospace,monospace}
+#log .e{color:var(--bad)}
+.lf{display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center}.lf input{max-width:240px}
+#dlg{border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--fg);width:min(760px,94vw);padding:16px}
+#dlg::backdrop{background:#0008}
+#ents{height:380px;overflow:auto;border:1px solid var(--line);border-radius:6px;margin:8px 0}
+#ents div{padding:5px 10px;cursor:pointer;border-bottom:1px solid var(--line)}
+#ents div:hover{background:var(--bg)}#ents .sel{background:var(--info);color:#fff}
+#cur{font:12px ui-monospace,monospace;word-break:break-all}
+</style></head><body>
+<header><h1>bagASM</h1><span class="sub">a User-Friendly Genome Assembly Pipeline</span>
+ <div class="gauges">
+  <div class="gauge">CPU <i><b id="gcpu"></b></i><span id="tcpu"></span></div>
+  <div class="gauge">RAM <i><b id="gram"></b></i><span id="tram"></span></div>
+  <button type="button" class="alt" id="theme" style="padding:4px 10px">Theme</button>
+ </div></header>
+<main>
+<form id="form" onsubmit="return false">
+ <fieldset><legend>Nextflow launch environment</legend>
+  <label>NXF_VER<input type="text" id="nxf_ver"></label>
+  <label>JAVA_HOME<input type="text" id="java_home"></label></fieldset>
+ <div id="groups"></div>
+ <fieldset><legend>Run settings (execution)</legend>
+  <label>Execution profile<select id="profile"><option>standard</option><option>slurm</option><option>sge</option></select></label>
+  <label class="chk"><input type="checkbox" id="resume"> -resume (reuse cached results)</label>
+  <label class="chk"><input type="checkbox" id="stub"> -stub-run (dry run, no computation)</label></fieldset>
+ <button type="button" class="alt" id="advtoggle">Show advanced options</button>
+ <div id="advbox" style="margin-top:12px"></div>
+</form>
+<section style="min-width:0">
+ <div class="row"><button id="run">Run</button><button id="stop" class="stop" disabled>Stop</button>
+  <button id="open" class="alt" disabled>Open output folder</button>
+  <button id="loadres" class="alt">Load results</button></div>
+ <div id="errs"></div>
+ <div id="status"><b>Idle</b></div><div id="meta"></div>
+ <div class="bar"><div id="pb"></div></div><div id="plabel" style="color:var(--mut)">0 / 0 process instances complete</div>
+
+ <fieldset style="margin-top:12px"><legend>Pipeline flow <small style="font-weight:400;color:var(--mut)">(click a step to filter the log)</small></legend><div id="flow"></div></fieldset>
+ <div id="fail"></div>
+ <fieldset><legend>Timeline</legend><div class="g" id="gantt"><span class="n" style="color:var(--mut)">Starts once the run begins.</span></div></fieldset>
+ <fieldset id="resbox" style="display:none"><legend>Results</legend><div id="results"></div></fieldset>
+ <fieldset><legend>Log</legend>
+  <div class="lf"><input type="text" id="lq" placeholder="search log"><label class="chk" style="margin:0"><input type="checkbox" id="lerr"> errors only</label>
+   <span id="lfilt"></span></div>
+  <div id="log"></div></fieldset>
+</section></main>
+<dialog id="dlg"><div id="cur"></div><div id="ents"></div>
+ <div class="row" style="margin:0"><button type="button" class="alt" id="up">&uarr; Up</button>
+  <button type="button" id="ok">Select</button><button type="button" class="alt" id="cancel">Cancel</button>
+  <span id="hint" style="color:var(--mut)"></span></div></dialog>
+<script>
+const FIELDS=__FIELDS__, BROWSE=__BROWSE__, ENV=__ENV__, $=id=>document.getElementById(id);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+/* ---- theme ---- */
+const root=document.documentElement;
+if(store.get("theme"))root.dataset.theme=store.get("theme");
+$("theme").onclick=()=>{const dark=root.dataset.theme?root.dataset.theme==="dark":matchMedia("(prefers-color-scheme:dark)").matches;
+  root.dataset.theme=dark?"light":"dark";store.set("theme",root.dataset.theme);if(lastRes)drawResults(lastRes)};
+
+/* ---- form ---- */
+const groups={};
+for(const [name,label,def,kind,group] of FIELDS){
+  const host=group.startsWith("Advanced")?$("advbox"):$("groups");
+  if(!groups[group]){const fs=document.createElement("fieldset");fs.innerHTML=`<legend>${group}</legend>`;host.appendChild(fs);groups[group]=fs}
+  const l=document.createElement("label");
+  if(kind==="bool"){l.className="chk";l.innerHTML=`<input type="checkbox" id="f_${name}"> ${label}`}
+  else if(Array.isArray(kind)){l.innerHTML=`${label}<select id="f_${name}">${kind.map(o=>`<option value="${o}"${o===def?" selected":""}>${o||"(none)"}</option>`).join("")}</select>`}
+  else if(BROWSE[name])l.innerHTML=`${label}<span class="pick"><input type="text" id="f_${name}" value="${def}"><button type="button" class="alt" data-b="${name}">Browse</button></span>`;
+  else l.innerHTML=`${label}<input type="text" id="f_${name}" value="${def}">`;
+  groups[group].appendChild(l);
+}
+$("nxf_ver").value=ENV.nxf_ver;$("java_home").value=ENV.java_home;
+$("advtoggle").onclick=()=>{const b=$("advbox"),s=b.style.display==="block";b.style.display=s?"none":"block";$("advtoggle").textContent=(s?"Show":"Hide")+" advanced options"};
+const val=e=>e.type==="checkbox"?e.checked:e.value;
+function params(){
+  const p={nxf_ver:$("nxf_ver").value,java_home:$("java_home").value,profile:$("profile").value,resume:$("resume").checked,stub:$("stub").checked};
+  for(const [name] of FIELDS)p[name]=val($("f_"+name));
+  return p}
+// remember the form across reloads
+try{const saved=JSON.parse(store.get("form")||"{}");
+  for(const [k,v] of Object.entries(saved)){const e=$("f_"+k)||$(k);if(e)e.type==="checkbox"?e.checked=v:e.value=v}}catch(e){}
+$("form").addEventListener("input",()=>{store.set("form",JSON.stringify(params()));drawFlow()});
+
+/* ---- file browser ---- */
+let bName=null,bPath="",bSel=[];
+async function bLoad(p){
+  const j=await (await fetch("/api/ls?path="+encodeURIComponent(p))).json();
+  bPath=j.path;bSel=[];$("cur").textContent=j.path;$("up").onclick=()=>bLoad(j.parent);
+  $("ents").innerHTML="";
+  for(const e of j.entries){const d=document.createElement("div");d.textContent=(e.dir?"\u{1F4C1} ":"\u{1F4C4} ")+e.name;
+    const full=j.path.replace(/\/$/,"")+"/"+e.name;
+    d.onclick=()=>{if(e.dir)return bLoad(full);
+      if(BROWSE[bName]!=="files")return;
+      const i=bSel.indexOf(full);i<0?bSel.push(full):bSel.splice(i,1);d.classList.toggle("sel")};
+    $("ents").appendChild(d)}}
+document.addEventListener("click",ev=>{const n=ev.target.dataset&&ev.target.dataset.b;if(!n)return;
+  bName=n;const cur=$("f_"+n).value.split(",").pop().trim();
+  $("hint").textContent=BROWSE[n]==="dir"?"Open the folder, then Select":"Click files to toggle (multi-select)";
+  bLoad(cur);$("dlg").showModal()});
+$("cancel").onclick=()=>$("dlg").close();
+$("ok").onclick=()=>{const e=$("f_"+bName);
+  if(BROWSE[bName]==="dir")e.value=bPath;
+  else if(bSel.length){const old=e.value.trim();e.value=(old?old+",":"")+bSel.join(",")}
+  e.dispatchEvent(new Event("input",{bubbles:true}));$("dlg").close()};
+
+/* ---- helpers ---- */
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const mmss=t=>{t=Math.max(0,Math.round(t));const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=t%60;
+  return (h?h+":"+String(m).padStart(2,"0"):m)+":"+String(s).padStart(2,"0")};
+const bp=n=>n==null?"–":n>=1e6?(n/1e6).toFixed(2)+" Mb":n>=1e3?(n/1e3).toFixed(1)+" kb":n+" bp";
+const base=n=>n.replace(/^ALIGN_(SR|LR)_FOR_QC$/,"ALIGN_FOR_QC").replace(/_(LR|SR|HYBRID)$/,"");
+
+/* ---- flow diagram ---- */
+const LANES=[["Reads",["FASTP","FILTLONG"]],
+ ["Assembly",["SPADES","FLYE","REDUNDANS","DECONTAM_ORGANELLE","POLYPOLISH","MEDAKA","RACON","QUAST_ROUNDS","RENAME_SORT"]],
+ ["Mitogenome",["GET_ORGANELLE_SETUP","GET_ORGANELLE_FROM_ASSEMBLY","GET_ORGANELLE_FROM_READS","FINALIZE_MITOGENOME"]],
+ ["QC",["QUAST","COMPLEASM","ALIGN_FOR_QC","QUALIMAP_BAMQC","FINAL_QC_REPORT"]]];
+function expected(){
+  const p=params(),sr=p.r1&&p.r2,lr=p.lr,t=p.lr_type;
+  const e=new Set(["GET_ORGANELLE_SETUP","GET_ORGANELLE_FROM_ASSEMBLY","FINALIZE_MITOGENOME","RENAME_SORT","QUAST","ALIGN_FOR_QC","QUALIMAP_BAMQC","FINAL_QC_REPORT"]);
+  if(sr)e.add("FASTP");
+  if(lr){e.add("FLYE");if(t==="ont"||t==="pacbio-clr")e.add("FILTLONG")}
+  else if(sr){e.add("SPADES");e.add("REDUNDANS")}
+  if(!p.skip_decontam)e.add("DECONTAM_ORGANELLE");
+  if(sr)e.add("POLYPOLISH");else if(lr&&t==="ont")e.add("MEDAKA");else if(lr&&t==="pacbio-clr")e.add("RACON");
+  if(p.busco_lineage)e.add("COMPLEASM");
+  return e}
+let rows=[],elapsed=0,procFilter="";
+function groupState(rs){
+  if(rs.some(r=>r.state==="failed"))return"failed";
+  if(rs.some(r=>r.state==="running"))return"running";
+  if(rs.every(r=>r.state==="cached"))return"cached";
+  if(rs.every(r=>r.state==="done"||r.state==="cached"))return"done";
+  return"running"}
+function drawFlow(){
+  const seen={};for(const r of rows)(seen[base(r.name)]??=[]).push(r);
+  const exp=expected(),known=new Set(LANES.flatMap(l=>l[1])),extra=Object.keys(seen).filter(n=>!known.has(n));
+  const lanes=LANES.map(([n,l])=>[n,l]);if(extra.length)lanes.push(["Other",extra]);
+  $("flow").innerHTML=lanes.map(([ln,names])=>{
+    const chips=names.filter(n=>seen[n]||exp.has(n)).map(n=>{
+      const rs=seen[n],st=rs?groupState(rs):"waiting";
+      let meta="waiting";
+      if(rs){const d=rs.reduce((a,r)=>a+r.done,0),t=rs.reduce((a,r)=>a+r.total,0);
+        const s0=Math.min(...rs.map(r=>r.start??elapsed)),ends=rs.map(r=>r.end);
+        const e1=ends.every(x=>x!=null)?Math.max(...ends):elapsed;
+        meta=`${d}/${t}`+(st==="cached"?" cached":" · "+mmss(e1-s0))}
+      return `<div class="chip ${st}${procFilter===n?" sel":""}" data-p="${n}"><b>${n}</b><small>${meta}</small></div>`}).join("");
+    return chips?`<div class="lane"><span class="ln">${ln}</span>${chips}</div>`:""}).join("")}
+$("flow").onclick=e=>{const c=e.target.closest(".chip");if(!c)return;
+  procFilter=procFilter===c.dataset.p?"":c.dataset.p;renderLog(true);drawFlow()};
+drawFlow();
+
+/* ---- gantt ---- */
+function drawGantt(){
+  const rs=rows.filter(r=>r.start!=null);if(!rs.length)return;
+  const T=Math.max(elapsed,1);
+  $("gantt").innerHTML=rs.map(r=>{const e=r.end??elapsed,l=100*r.start/T,w=Math.max(.4,100*(e-r.start)/T);
+    return `<span class="n" title="${esc(r.name)}">${esc(r.name)}${r.tag?" ("+esc(r.tag)+")":""}</span><span class="t"><i class="${r.state}" style="left:${l}%;width:${w}%"></i><em>${r.state==="cached"?"cached":mmss(e-r.start)}</em></span>`}).join("")}
+
+/* ---- failures ---- */
+function drawFail(fs){
+  $("fail").innerHTML=fs.map(f=>`<fieldset class="card" style="border-color:var(--bad)"><legend style="color:var(--bad)">Failed: ${esc(f.proc)}</legend>
+   <pre>${esc(f.err||"(no .command.err found)")}</pre>
+   <details><summary>command</summary><pre>${esc(f.cmd)}</pre></details>
+   <small style="color:var(--mut)">${esc(f.workdir)}</small></fieldset>`).join("")}
+
+/* ---- log ---- */
+let logLines=[],shown=0;
+const lineOk=l=>(!procFilter||l[0].includes(procFilter))&&(!$("lerr").checked||l[1])&&(!$("lq").value||l[0].toLowerCase().includes($("lq").value.toLowerCase()));
+function addLine(l,log){const sp=document.createElement("span");if(l[1])sp.className="e";sp.textContent=l[0];log.appendChild(sp)}
+function renderLog(full){
+  const log=$("log"),stick=log.scrollTop+log.clientHeight>=log.scrollHeight-20;
+  if(full){log.innerHTML="";shown=0}
+  for(;shown<logLines.length;shown++)if(lineOk(logLines[shown]))addLine(logLines[shown],log);
+  $("lfilt").innerHTML=procFilter?`filter: <b>${procFilter}</b> <a href="#" onclick="procFilter='';renderLog(true);drawFlow();return false">clear</a>`:"";
+  if(stick||full)log.scrollTop=log.scrollHeight}
+$("lq").oninput=$("lerr").onchange=()=>renderLog(true);
+
+/* ---- results dashboard ---- */
+let lastRes=null;
+const C={S:"#2e9e6b",D:"#3b82c4",F:"#d9a21b",I:"#8e6bbf",M:"#cf4b3f"};
+function tile(v,l){return `<div class="tile"><b>${v}</b><span>${l}</span></div>`}
+function hbars(items,fmt){ // items [[label,value]]
+  const mx=Math.max(...items.map(i=>i[1])),H=18,W=640,L=56,R=90;
+  return `<svg viewBox="0 0 ${W} ${items.length*H+4}">`+items.map(([l,v],i)=>{
+    const w=(W-L-R)*v/mx;return `<text class="m" x="${L-6}" y="${i*H+13}" text-anchor="end">${esc(l)}</text><rect x="${L}" y="${i*H+2}" width="${w}" height="${H-5}" rx="2" fill="var(--info)"/><text x="${L+w+5}" y="${i*H+13}">${fmt(v)}</text>`}).join("")+"</svg>"}
+function drawResults(r){
+  lastRes=r;const box=$("resbox");
+  if(!r||!r.found){box.style.display="block";$("results").innerHTML='<span style="color:var(--mut)">No results found yet in this output directory.</span>';return}
+  box.style.display="block";const q=r.quast||{},m=r.qualimap||{};
+  let h='<div class="tiles">';
+  if(q["# contigs"]!=null)h+=tile(q["# contigs"],"contigs");
+  if(q["Total length"]!=null)h+=tile(bp(q["Total length"]),"total length");
+  if(q["N50"]!=null)h+=tile(bp(q["N50"]),"N50");
+  if(q["Largest contig"]!=null)h+=tile(bp(q["Largest contig"]),"largest contig");
+  if(q["GC (%)"]!=null)h+=tile(q["GC (%)"]+"%","GC");
+  if(m["Mean coverage"])h+=tile(esc(m["Mean coverage"]),"mean coverage");
+  if(m["Mapped reads"])h+=tile(esc(m["Mapped reads"].match(/\(([\d.]+%)\)/)?.[1]||m["Mapped reads"]),"reads mapped");
+  if(r.mito&&r.mito.length)h+=tile(r.mito.length>1?r.mito.length+" seqs":bp(r.mito[0]),"mitogenome");
+  h+="</div>";
+  if(r.busco){const p=r.busco.pct,names={S:"Single",D:"Duplicated",F:"Fragmented",I:"Interspersed",M:"Missing"};
+    let x=0;const segs=Object.entries(names).map(([k,n])=>{const v=p[n]||0,w=6.4*v,s=`<rect x="${x}" y="0" width="${w}" height="26" fill="${C[k]}"/>`;x+=w;return s}).join("");
+    h+=`<div class="chart"><h4>Gene completeness · ${esc(r.busco.lineage||"")} (${r.busco.total||"?"} genes)</h4><svg viewBox="0 0 640 26">${segs}</svg><div class="leg">${Object.entries(names).map(([k,n])=>`<span><i style="background:${C[k]}"></i>${n} ${(p[n]??0).toFixed(1)}%</span>`).join("")}</div></div>`}
+  if(r.rounds&&r.rounds.labels){const R=r.rounds;
+    h+=`<div class="chart"><h4>N50 across polishing rounds</h4>${hbars(R.labels.map((l,i)=>[l,R.N50[i]||0]),bp)}</div>`}
+  if(r.contigs&&r.contigs.length){
+    h+=`<div class="chart"><h4>Largest contigs (${Math.min(25,r.contigs.length)} of ${r.n_contigs})</h4>${hbars(r.contigs.slice(0,25).map((v,i)=>["#"+(i+1),v]),bp)}</div>`}
+  if(r.report)h+=`<details><summary>Final QC report</summary><pre>${esc(r.report)}</pre></details>`;
+  $("results").innerHTML=h}
+async function loadResults(){
+  const p=params();
+  drawResults(await (await fetch(`/api/results?outdir=${encodeURIComponent(p.outdir)}&strain=${encodeURIComponent(p.strain)}`)).json())}
+$("loadres").onclick=loadResults;
+
+/* ---- run control + polling ---- */
+let since=0,timer=null,prev="idle",first=true;
+$("run").onclick=async()=>{
+  if("Notification" in window&&Notification.permission==="default")Notification.requestPermission();
+  const r=await fetch("/api/run",{method:"POST",body:JSON.stringify(params())});
+  const j=await r.json();$("errs").textContent=(j.errors||[]).map(e=>"• "+e).join("\n");
+  if(!j.errors.length){since=0;logLines=[];renderLog(true);procFilter="";$("resbox").style.display="none";$("fail").innerHTML="";poll()}};
+$("stop").onclick=()=>fetch("/api/stop",{method:"POST"});
+$("open").onclick=()=>fetch("/api/open",{method:"POST"});
+async function poll(){
+  clearTimeout(timer);
+  let s;try{s=await (await fetch("/api/state?since="+since)).json()}catch(e){timer=setTimeout(poll,3000);return}
+  rows=s.rows;elapsed=s.elapsed;
+  if(first){first=false;
+    if(s.strain&&!$("f_strain").value){$("f_strain").value=s.strain;$("f_outdir").value=s.outdir}
+    if(s.status!=="idle"&&s.status!=="running")loadResults()}
+  logLines.push(...s.log);since=s.next;renderLog(false);
+  drawFlow();drawGantt();drawFail(s.failures);
+  const pct=s.total?100*s.done/s.total:0,run=s.status==="running";
+  $("pb").style.width=pct+"%";
+  $("plabel").textContent=`${s.done} / ${s.total} process instances complete (${pct.toFixed(0)}%)`;
+  let meta="";if(s.status!=="idle"){meta=`elapsed ${mmss(s.elapsed)}`;
+    if(run&&pct>=10)meta+=` · ETA ~${mmss(s.elapsed*(100-pct)/pct)} (rough)`}
+  $("meta").textContent=meta;
+  $("run").disabled=run;$("stop").disabled=!run;$("open").disabled=s.status!=="done";
+  $("status").innerHTML="<b>"+({idle:"Idle",running:"Running...",done:"Completed successfully",failed:"Exited with code "+s.code}[s.status])+"</b>";
+  $("pb").style.background=s.status==="failed"?"var(--bad)":s.status==="done"?"var(--acc)":"var(--info)";
+  document.title=run?`${pct.toFixed(0)}% · bagASM`:s.status==="done"?"✓ bagASM":s.status==="failed"?"✗ bagASM":"bagASM Runner";
+  if(s.sys){$("gcpu").style.width=s.sys.cpu+"%";$("tcpu").textContent=s.sys.cpu+"%";$("gram").style.width=s.sys.ram+"%";$("tram").textContent=s.sys.ram+"% of "+s.sys.ram_gb+" GB"}
+  if(prev==="running"&&s.status!=="running"){
+    if(s.status==="done")loadResults();
+    if("Notification" in window&&Notification.permission==="granted")new Notification("bagASM",{body:s.status==="done"?"Run completed":"Run failed (exit "+s.code+")",icon:"/icon.png"})}
+  prev=s.status;
+  timer=setTimeout(poll,run?1000:3000)}
+poll();
+</script></body></html>
