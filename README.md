@@ -176,6 +176,7 @@ swap in your own sample name and output folder.
                         or several joined by comma, e.g. embplant_pt,embplant_mt
     --skip_trimming      Skip fastp entirely — no adapter/quality/length trimming,
                         no HTML/JSON QC report [false]  (MODE 1 only)
+    --no_careful         Don't pass --careful to SPAdes [false]  (short-read mode)
     --threads            Threads for process_high steps [20]
     --ont_mode            Flye ONT preset [hq]: hq (--nano-hq, modern/Dorado-Guppy-sup)
                         | raw (--nano-raw, R9/low-quality basecalls)  (--lr_type ont only)

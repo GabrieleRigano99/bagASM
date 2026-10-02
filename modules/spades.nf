@@ -14,12 +14,13 @@ process SPADES {
     path "${strain}_spades.log", emit: log
 
     script:
+    def careful = params.no_careful ? "" : "--careful"
     def mem_gb = Math.max(1, (int) (task.memory.toGiga()))
     """
     spades.py \\
         -1 ${r1} -2 ${r2} \\
         -k 27,37,55,77,99,111,127 \\
-        --only-assembler --careful \\
+        --only-assembler ${careful} \\
         -t ${task.cpus} -m ${mem_gb} \\
         -o spades_out
 

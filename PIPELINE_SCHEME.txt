@@ -44,7 +44,7 @@ CASE 1 — short reads only (--r1 + --r2, no --lr)
        |                              all — no trimming, no QC report; lane
        |                              pooling/gzip normalization still do)
        v
-  [SPADES] 4.3.0   -k 27,37,55,77,99,111,127  --only-assembler --careful
+  [SPADES] 4.3.0   -k 27,37,55,77,99,111,127  --only-assembler --careful  (--no_careful drops it)
        |
        +-----------------------------------------------+
        |                                                |
